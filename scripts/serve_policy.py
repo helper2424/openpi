@@ -118,9 +118,9 @@ def main(args: Args) -> None:
     local_ip = socket.gethostbyname(hostname)
     logging.info("Creating server (host: %s, ip: %s)", hostname, local_ip)
 
-    if len(args.policies_dirs) <- 0:
+    if len(args.policies_dirs) <= 0:
         raise ValueError("policies_dirs must be provided")
-    if len(args.policies_configs) <- 0:
+    if len(args.policies_configs) <= 0:
         raise ValueError("policies_configs must be provided")
     
     if len(args.policies_dirs) != len(args.policies_configs):
