@@ -4,7 +4,7 @@ import logging
 import time
 import traceback
 
-from openpi.scripts.serve_policy import create_policy
+from openpi.scripts.serve_policy import create_policy, clear_device_memory, Checkpoint
 from openpi_client import base_policy as _base_policy
 from openpi_client import msgpack_numpy
 import websockets.asyncio.server as _server
@@ -24,21 +24,17 @@ class WebsocketPolicyServer:
         host: str = "0.0.0.0",
         port: int | None = None,
         metadata: dict | None = None,
+        default_prompt: str | None = None,
     ) -> None:
         self._policies_configs = policies_configs
         self._host = host
         self._port = port
         self._metadata = metadata or {}
+        self._default_prompt = default_prompt
         logging.getLogger("websockets.server").setLevel(logging.INFO)
 
-        if self.is_multi_policy():
-            self._policy_index = 0
-            self._policy = create_policy(self._policies_configs[self._policy_index])
-        else:
-            self._policy = create_policy(self._policies_configs)
-
-    def is_multi_policy(self) -> bool:
-        return isinstance(self._policies_configs, list)
+        self._policy_index = 0
+        self._policy = create_policy(self._policies_configs[self._policy_index], self._default_prompt)
         
     def serve_forever(self) -> None:
         asyncio.run(self.run())
@@ -71,7 +67,7 @@ class WebsocketPolicyServer:
                         del self._policy
                         clear_device_memory()
                         self._policy_index = (self._policy_index + 1) % len(self._policies_configs)
-                        self._policy = create_policy(self._policies_configs[self._policy_index])
+                        self._policy = create_policy(self._policies_configs[self._policy_index], self._default_prompt)
                 except:
                     logger.error(f"Error updating policy index: {traceback.format_exc()}")
                     pass
