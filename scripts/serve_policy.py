@@ -48,11 +48,9 @@ class Args:
 
     # Port to serve the policy on.
     port: int = 8000
-    # Record the policy's behavior for debugging.
-    record: bool = False
 
-    # Specifies how to load the policy. If not provided, the default policy for the environment will be used.
-    policies: list[Checkpoint] | Default = dataclasses.field(default_factory=Default)
+    policies_dirs: list[str] = dataclasses.field(default_factory=list)
+    policies_configs: list[str] = dataclasses.field(default_factory=list)
 
 
 # Default checkpoints that should be used for each environment.
@@ -120,6 +118,18 @@ def main(args: Args) -> None:
     local_ip = socket.gethostbyname(hostname)
     logging.info("Creating server (host: %s, ip: %s)", hostname, local_ip)
 
+    if len(args.policies_dirs) <- 0:
+        raise ValueError("policies_dirs must be provided")
+    if len(args.policies_configs) <- 0:
+        raise ValueError("policies_configs must be provided")
+    
+    if len(args.policies_dirs) != len(args.policies_configs):
+        raise ValueError("policies_dirs and policies_configs must have the same length")
+    
+    policies_configs = []
+    for policy_dir, policy_config in zip(args.policies_dirs, args.policies_configs):
+        policies_configs.append(Checkpoint(config=policy_config, dir=policy_dir))
+    
     # Initialize the policies before using them
     if isinstance(args.policies, list):
         for policy in args.policies:
