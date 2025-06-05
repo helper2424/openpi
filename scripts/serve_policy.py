@@ -126,7 +126,7 @@ def main(args: Args) -> None:
     
     policies_configs = []
     for policy_dir, policy_config in zip(args.policies_dirs, args.policies_configs):
-        policies_configs.append(Checkpoint(config=policy_config, dir=policy_dir), args.default_prompt)
+        policies_configs.append(Checkpoint(config=policy_config, dir=policy_dir))
     
     # Initialize the policies before using them
     for policy in policies_configs:
@@ -137,6 +137,7 @@ def main(args: Args) -> None:
         policies_configs=policies_configs,
         host="0.0.0.0",
         port=args.port,
+        default_prompt=args.default_prompt,
     )
     server.serve_forever()
 
