@@ -4,7 +4,7 @@ import logging
 import time
 import traceback
 
-from openpi.scripts.serve_policy import create_policy, clear_device_memory, Checkpoint
+from openpi.serving.utils import create_policy, clear_device_memory, Checkpoint
 from openpi_client import base_policy as _base_policy
 from openpi_client import msgpack_numpy
 import websockets.asyncio.server as _server
