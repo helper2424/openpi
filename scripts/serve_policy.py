@@ -20,14 +20,7 @@ class EnvMode(enum.Enum):
     LIBERO = "libero"
 
 
-@dataclasses.dataclass
-class Checkpoint:
-    """Load a policy from a trained checkpoint."""
 
-    # Training config name (e.g., "pi0_aloha_sim").
-    config: str
-    # Checkpoint directory (e.g., "checkpoints/pi0_aloha_sim/exp/10000").
-    dir: str
 
 
 @dataclasses.dataclass
