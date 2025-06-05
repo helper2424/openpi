@@ -20,7 +20,7 @@ class WebsocketPolicyServer:
 
     def __init__(
         self,
-        policies_configs: list[dict],
+        policies_configs: list[Checkpoint],
         host: str = "0.0.0.0",
         port: int | None = None,
         metadata: dict | None = None,
