@@ -9,7 +9,9 @@ from openpi.policies import policy as _policy
 from openpi.policies import policy_config as _policy_config
 from openpi.serving import websocket_policy_server
 from openpi.training import config as _config
-import jax
+
+from openpi.serving.utils import create_policy, clear_device_memory, Checkpoint
+
 
 class EnvMode(enum.Enum):
     """Supported environments."""
