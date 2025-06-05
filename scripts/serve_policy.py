@@ -83,11 +83,13 @@ def create_default_policy(env: EnvMode, *, default_prompt: str | None = None) ->
     raise ValueError(f"Unsupported environment mode: {env}")
 
 
-def create_policy(policy_config: Checkpoint) -> _policy.Policy:
+def create_policy(config: Checkpoint, default_prompt: str | None = None) -> _policy.Policy:
     """Create a policy from the given arguments."""
-    return _policy_config.create_trained_policy(
-        _config.get_config(policy_config.config), policy_config.dir, default_prompt=args.default_prompt
-    )
+    match config:
+        case Checkpoint():
+            return _policy_config.create_trained_policy(
+                _config.get_config(config.config), config.dir, default_prompt=default_prompt
+            )
 
 def clear_device_memory():
     """Clear GPU/TPU memory more aggressively."""
@@ -124,7 +126,7 @@ def main(args: Args) -> None:
     
     policies_configs = []
     for policy_dir, policy_config in zip(args.policies_dirs, args.policies_configs):
-        policies_configs.append(Checkpoint(config=policy_config, dir=policy_dir))
+        policies_configs.append(Checkpoint(config=policy_config, dir=policy_dir), args.default_prompt)
     
     # Initialize the policies before using them
     for policy in policies_configs:
