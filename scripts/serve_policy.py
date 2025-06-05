@@ -131,16 +131,12 @@ def main(args: Args) -> None:
         policies_configs.append(Checkpoint(config=policy_config, dir=policy_dir))
     
     # Initialize the policies before using them
-    if isinstance(args.policies, list):
-        for policy in args.policies:
-            clear_device_memory()
-            create_policy(policy)
-    else:
+    for policy in policies_configs:
         clear_device_memory()
-        policy = create_policy(args.policies)
+        create_policy(policy)
 
     server = websocket_policy_server.WebsocketPolicyServer(
-        policies_configs=args.policies,
+        policies_configs=policies_configs,
         host="0.0.0.0",
         port=args.port,
     )
