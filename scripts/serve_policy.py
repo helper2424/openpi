@@ -95,11 +95,39 @@ def create_policy(args: Args) -> _policy.Policy:
         case Default():
             return create_default_policy(args.env, default_prompt=args.default_prompt)
 
+def clear_device_memory():
+    """Clear GPU/TPU memory more aggressively."""
+    
+    # Clear all JAX state
+    jax.clear_caches()
+    
+    # For GPU: Force CUDA to release memory
+    import jax.lib.xla_bridge as xb
+    backend = xb.get_backend()
+    
+    if backend.platform == 'gpu':
+        # This forces synchronization and cleanup
+        for device in jax.devices():
+            device.synchronize_all_activity()
+    
+    # Garbage collect
+    import gc
+    gc.collect()
+
 
 def main(args: Args) -> None:
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
     logging.info("Creating server (host: %s, ip: %s)", hostname, local_ip)
+
+    # Initialize the policies before using them
+    if isinstance(args.policies, list):
+        for policy in args.policies:
+            clear_device_memory()
+            create_policy(policy)
+    else:
+        clear_device_memory()
+        policy = create_policy(args.policies)
 
     server = websocket_policy_server.WebsocketPolicyServer(
         policies_configs=args.policies,

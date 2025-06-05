@@ -12,25 +12,6 @@ import websockets.frames
 
 logger = logging.getLogger(__name__)
 
-def clear_device_memory():
-    """Clear GPU/TPU memory more aggressively."""
-    
-    # Clear all JAX state
-    jax.clear_caches()
-    
-    # For GPU: Force CUDA to release memory
-    import jax.lib.xla_bridge as xb
-    backend = xb.get_backend()
-    
-    if backend.platform == 'gpu':
-        # This forces synchronization and cleanup
-        for device in jax.devices():
-            device.synchronize_all_activity()
-    
-    # Garbage collect
-    import gc
-    gc.collect()
-
 class WebsocketPolicyServer:
     """Serves a policy using the websocket protocol. See websocket_client_policy.py for a client implementation.
 
