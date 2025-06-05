@@ -103,10 +103,10 @@ def clear_device_memory():
     import jax.lib.xla_bridge as xb
     backend = xb.get_backend()
     
-    if backend.platform == 'gpu':
-        # This forces synchronization and cleanup
-        for device in jax.devices():
-            device.synchronize_all_activity()
+    # if backend.platform == 'gpu':
+    #     # This forces synchronization and cleanup
+    #     for device in jax.devices():
+    #         device.synchronize_all_activity()
     
     # Garbage collect
     import gc
