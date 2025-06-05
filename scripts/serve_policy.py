@@ -83,34 +83,6 @@ def create_default_policy(env: EnvMode, *, default_prompt: str | None = None) ->
     raise ValueError(f"Unsupported environment mode: {env}")
 
 
-def create_policy(config: Checkpoint, default_prompt: str | None = None) -> _policy.Policy:
-    """Create a policy from the given arguments."""
-    match config:
-        case Checkpoint():
-            return _policy_config.create_trained_policy(
-                _config.get_config(config.config), config.dir, default_prompt=default_prompt
-            )
-
-def clear_device_memory():
-    """Clear GPU/TPU memory more aggressively."""
-    
-    # Clear all JAX state
-    jax.clear_caches()
-    
-    # For GPU: Force CUDA to release memory
-    import jax.lib.xla_bridge as xb
-    backend = xb.get_backend()
-    
-    # if backend.platform == 'gpu':
-    #     # This forces synchronization and cleanup
-    #     for device in jax.devices():
-    #         device.synchronize_all_activity()
-    
-    # Garbage collect
-    import gc
-    gc.collect()
-
-
 def main(args: Args) -> None:
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
