@@ -4,6 +4,7 @@ import logging
 import time
 import traceback
 
+from openpi.scripts.serve_policy import create_policy
 from openpi_client import base_policy as _base_policy
 from openpi_client import msgpack_numpy
 import websockets.asyncio.server as _server
@@ -11,6 +12,24 @@ import websockets.frames
 
 logger = logging.getLogger(__name__)
 
+def clear_device_memory():
+    """Clear GPU/TPU memory more aggressively."""
+    
+    # Clear all JAX state
+    jax.clear_caches()
+    
+    # For GPU: Force CUDA to release memory
+    import jax.lib.xla_bridge as xb
+    backend = xb.get_backend()
+    
+    if backend.platform == 'gpu':
+        # This forces synchronization and cleanup
+        for device in jax.devices():
+            device.synchronize_all_activity()
+    
+    # Garbage collect
+    import gc
+    gc.collect()
 
 class WebsocketPolicyServer:
     """Serves a policy using the websocket protocol. See websocket_client_policy.py for a client implementation.
@@ -20,17 +39,26 @@ class WebsocketPolicyServer:
 
     def __init__(
         self,
-        policy: _base_policy.BasePolicy,
+        policies_configs: list[dict],
         host: str = "0.0.0.0",
         port: int | None = None,
         metadata: dict | None = None,
     ) -> None:
-        self._policy = policy
+        self._policies_configs = policies_configs
         self._host = host
         self._port = port
         self._metadata = metadata or {}
         logging.getLogger("websockets.server").setLevel(logging.INFO)
 
+        if self.is_multi_policy():
+            self._policy_index = 0
+            self._policy = create_policy(self._policies_configs[self._policy_index])
+        else:
+            self._policy = create_policy(self._policies_configs)
+
+    def is_multi_policy(self) -> bool:
+        return isinstance(self._policies_configs, list)
+        
     def serve_forever(self) -> None:
         asyncio.run(self.run())
 
@@ -56,6 +84,16 @@ class WebsocketPolicyServer:
             try:
                 start_time = time.monotonic()
                 obs = msgpack_numpy.unpackb(await websocket.recv())
+
+                try:
+                    if obs['state'][0] == 1000:
+                        del self._policy
+                        clear_device_memory()
+                        self._policy_index = (self._policy_index + 1) % len(self._policies_configs)
+                        self._policy = create_policy(self._policies_configs[self._policy_index])
+                except:
+                    logger.error(f"Error updating policy index: {traceback.format_exc()}")
+                    pass
 
                 infer_time = time.monotonic()
                 action = self._policy.infer(obs)

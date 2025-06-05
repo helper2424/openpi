@@ -52,7 +52,7 @@ class Args:
     record: bool = False
 
     # Specifies how to load the policy. If not provided, the default policy for the environment will be used.
-    policy: Checkpoint | Default = dataclasses.field(default_factory=Default)
+    policies: list[Checkpoint] | Default = dataclasses.field(default_factory=Default)
 
 
 # Default checkpoints that should be used for each environment.
@@ -97,22 +97,14 @@ def create_policy(args: Args) -> _policy.Policy:
 
 
 def main(args: Args) -> None:
-    policy = create_policy(args)
-    policy_metadata = policy.metadata
-
-    # Record the policy's behavior.
-    if args.record:
-        policy = _policy.PolicyRecorder(policy, "policy_records")
-
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
     logging.info("Creating server (host: %s, ip: %s)", hostname, local_ip)
 
     server = websocket_policy_server.WebsocketPolicyServer(
-        policy=policy,
+        policies_configs=args.policies,
         host="0.0.0.0",
         port=args.port,
-        metadata=policy_metadata,
     )
     server.serve_forever()
 
