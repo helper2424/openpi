@@ -553,7 +553,7 @@ _CONFIGS = [
         name="demo3_frames_grab3",
         model=pi0.Pi0Config(action_horizon=10),
         data=LeRobotSAMDataConfig(
-            repo_id="1g0rrr/demo3_frames_grab3",
+            repo_id="helper2424/demo3_frames_grab3",
             base_config=DataConfig(
                 local_files_only=False,
                 prompt_from_task=True,
