@@ -65,7 +65,6 @@ def save_state(
     step: int,
 ):
     def save_assets(directory: epath.Path):
-        breakpoint()
         # Save the normalization stats.
         data_config = data_loader.data_config()
         norm_stats = data_config.norm_stats
@@ -80,6 +79,7 @@ def save_state(
         "train_state": train_state,
         "params": {"params": params},
     }
+
     checkpoint_manager.save(step, items)
 
 
