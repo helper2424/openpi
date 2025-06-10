@@ -65,6 +65,7 @@ def save_state(
     step: int,
 ):
     def save_assets(directory: epath.Path):
+        breakpoint()
         # Save the normalization stats.
         data_config = data_loader.data_config()
         norm_stats = data_config.norm_stats
