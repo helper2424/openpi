@@ -133,7 +133,6 @@ def deserialize_json(data: str) -> dict[str, NormStats]:
 
 
 def save(directory: pathlib.Path | str, norm_stats: dict[str, NormStats]) -> None:
-    breakpoint()
     """Save the normalization stats to a directory."""
     path = pathlib.Path(directory) / "norm_stats.json"
     path.parent.mkdir(parents=True, exist_ok=True)
