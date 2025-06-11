@@ -500,7 +500,6 @@ _CONFIGS = [
         data=LeRobotSAMDataConfig(
             repo_id="1g0rrr/demo2_frames_grab",
             base_config=DataConfig(
-                local_files_only=False,
                 # prompt_from_task=True,
             ),
         ),
@@ -513,7 +512,6 @@ _CONFIGS = [
         data=LeRobotSAMDataConfig(
             repo_id="1g0rrr/demo2_upart_peeloff",
             base_config=DataConfig(
-                local_files_only=False,
                 prompt_from_task=True,
             ),
         ),
@@ -526,7 +524,6 @@ _CONFIGS = [
         data=LeRobotSAMDataConfig(
             repo_id="1g0rrr/demo2_frame_holder",
             base_config=DataConfig(
-                local_files_only=False,
                 prompt_from_task=True,
             ),
         ),
@@ -539,7 +536,6 @@ _CONFIGS = [
         data=LeRobotSAMFastDataConfig(
             repo_id="1g0rrr/sam_frames4",
             base_config=DataConfig(
-                local_files_only=False,
                 prompt_from_task=True,
             ),
         ),
@@ -552,7 +548,6 @@ _CONFIGS = [
         data=LeRobotSAMDataConfig(
             repo_id="1g0rrr/demo2_sand_peeloff",
             base_config=DataConfig(
-                local_files_only=False,
                 prompt_from_task=True,
             ),
         ),
@@ -565,7 +560,6 @@ _CONFIGS = [
         data=LeRobotSAMDataConfig(
             repo_id="1g0rrr/sam_frames5",
             base_config=DataConfig(
-                local_files_only=False,
                 prompt_from_task=True,
             ),
         ),
@@ -578,7 +572,6 @@ _CONFIGS = [
         data=LeRobotSAMDataConfig(
             repo_id="1g0rrr/sam_frames4",
             base_config=DataConfig(
-                local_files_only=False,
                 prompt_from_task=True,
             ),
         ),
@@ -591,7 +584,6 @@ _CONFIGS = [
         data=LeRobotSAMDataConfig(
             repo_id="1g0rrr/sam_openpi_solder1",
             base_config=DataConfig(
-                local_files_only=False,
                 prompt_from_task=True,
             ),
         ),
@@ -604,7 +596,6 @@ _CONFIGS = [
         data=LeRobotSAMDataConfig(
             repo_id="1g0rrr/sam_openpi_solder2",
             base_config=DataConfig(
-                local_files_only=False,
             ),
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
@@ -840,7 +831,6 @@ _CONFIGS = [
         data=LeRobotSAMDataConfig(
             repo_id="1g0rrr/demo3_frames_grab3",
             base_config=DataConfig(
-                local_files_only=False,
                 prompt_from_task=True,
             ),
         ),
