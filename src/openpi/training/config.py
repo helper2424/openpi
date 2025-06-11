@@ -512,7 +512,7 @@ _CONFIGS = [
         data=LeRobotSAMDataConfig(
             repo_id="1g0rrr/demo2_upart_peeloff",
             base_config=DataConfig(
-ƒ                prompt_from_task=True,
+               prompt_from_task=True
             ),
         ),
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
