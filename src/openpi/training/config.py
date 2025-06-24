@@ -857,7 +857,7 @@ _CONFIGS = [
             warmup_steps=64,
             decay_steps=936,
             peak_lr=8.0e-4,
-            decay_lr = 8.0e-6
+            decay_lr = 8.0e-5
         )
     ),
 ]
