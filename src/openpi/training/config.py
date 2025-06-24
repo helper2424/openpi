@@ -854,10 +854,10 @@ _CONFIGS = [
         fsdp_devices=8,
         num_workers=8,
         lr_schedule=_optimizer.CosineDecaySchedule(
-            warmup_steps=64,
-            decay_steps=936,
-            peak_lr=8.0e-4,
-            decay_lr = 8.0e-5
+            warmup_steps=150,
+            decay_steps=850,
+            peak_lr=1.4e-4,
+            decay_lr = 1.4e-5
         )
     ),
 ]
