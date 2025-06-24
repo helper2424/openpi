@@ -837,6 +837,29 @@ _CONFIGS = [
         weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
         num_train_steps=30_000,
     ),
+    TrainConfig(
+        name="demo3_frames_grab3_8_h100",
+        model=pi0.Pi0Config(action_horizon=10),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/demo3_frames_grab3",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=1000,
+        batch_size=1024,
+        log_interval = 5,
+        save_interval = 300,
+        fsdp_devices=8,
+        num_workers=8,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=64,
+            decay_steps=936,
+            peak_lr=8.0e-4,
+            decay_lr = 8.0e-6
+        )
+    ),
 ]
 
 if len({config.name for config in _CONFIGS}) != len(_CONFIGS):
