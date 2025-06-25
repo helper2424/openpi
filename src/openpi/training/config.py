@@ -11,6 +11,7 @@ from typing import Any, Protocol, TypeAlias
 import etils.epath as epath
 import flax.nnx as nnx
 from typing_extensions import override
+from openpi.policies import sam_policy, sam_policy_fast
 import tyro
 
 import openpi.models.model as _model
@@ -408,8 +409,198 @@ class TrainConfig:
             raise ValueError("Cannot resume and overwrite at the same time.")
 
 
+
+@dataclasses.dataclass(frozen=True)
+class LeRobotSAMFastDataConfig(DataConfigFactory):
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+            # Repack transforms.
+
+        repack_transform = _transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "laptop": "observation.images.laptop",
+                        "phone": "observation.images.phone",
+                        "side": "observation.images.side",
+                        "state": "observation.state",
+                        "actions": "action",
+                    }               
+                )
+            ]
+        )
+        
+        data_transforms = _transforms.Group(
+            inputs=[sam_policy_fast.SAMInputs(action_dim=model_config.action_dim, model_type=ModelType.PI0_FAST)],
+            outputs=[sam_policy_fast.SAMOutputs()],
+        )
+
+        delta_action_mask = _transforms.make_bool_mask(6, -1)
+        data_transforms = data_transforms.push(
+            inputs=[_transforms.DeltaActions(delta_action_mask)],
+            outputs=[_transforms.AbsoluteActions(delta_action_mask)],
+        )
+
+        model_transforms = ModelTransformFactory(default_prompt="Move top brown frame to the green rectangle.")(model_config)
+
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs),
+            repack_transforms=repack_transform,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+            action_sequence_keys=("action",)
+        )
+
+@dataclasses.dataclass(frozen=True)
+class LeRobotSAMDataConfig(DataConfigFactory):
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+            # Repack transforms.
+        repack_transform = _transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "laptop": "observation.images.laptop",
+                        "phone": "observation.images.phone",
+                        "side": "observation.images.side",
+                        "state": "observation.state",
+                        "actions": "action",
+                    }               
+                )
+            ]
+        )
+        
+        data_transforms = _transforms.Group(
+            inputs=[sam_policy.SAMInputs(action_dim=model_config.action_dim, model_type=model_config.model_type)],
+            outputs=[sam_policy.SAMOutputs()],
+        )
+
+        delta_action_mask = _transforms.make_bool_mask(6, -1)
+        data_transforms = data_transforms.push(
+            inputs=[_transforms.DeltaActions(delta_action_mask)],
+            outputs=[_transforms.AbsoluteActions(delta_action_mask)],
+        )
+
+        model_transforms = ModelTransformFactory(default_prompt="Move brown frame to the black holder.")(model_config)
+
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs),
+            repack_transforms=repack_transform,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+            action_sequence_keys=("action",)
+        )
+
+
 # Use `get_config` if you need to get a config by name in your code.
 _CONFIGS = [
+    TrainConfig(
+        name="demo2_frames_grab",
+        model=pi0.Pi0Config(action_horizon=10),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/demo2_frames_grab",
+            base_config=DataConfig(
+                # prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),  
+    TrainConfig(
+        name="demo2_upart_peeloff",
+        model=pi0.Pi0Config(action_horizon=10),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/demo2_upart_peeloff",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),  
+    TrainConfig(
+        name="demo2_frame_holder",
+        model=pi0.Pi0Config(action_horizon=10),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/demo2_frame_holder",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),  
+    TrainConfig(
+        name="sam_frames4_fast",
+        model=pi0_fast.Pi0FASTConfig(action_dim=7, action_horizon=10, max_token_len=180),
+        data=LeRobotSAMFastDataConfig(
+            repo_id="1g0rrr/sam_frames4",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_fast_base/params"),
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="demo2_sand_peeloff",
+        model=pi0.Pi0Config(action_horizon=10),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/demo2_sand_peeloff",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),  
+    TrainConfig(
+        name="sam_frames5",
+        model=pi0.Pi0Config(action_horizon=10),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/sam_frames5",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),     
+    TrainConfig(
+        name="sam_frames4B",
+        model=pi0.Pi0Config(action_horizon=10),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/sam_frames4",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),      
+    TrainConfig(
+        name="openpi_solder1",
+        model=pi0.Pi0Config(action_horizon=10),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/sam_openpi_solder1",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_fast_base/params"),
+        num_train_steps=30_000,
+    ),  
+    TrainConfig(
+        name="sam_openpi_solder2",
+        model=pi0.Pi0Config(action_horizon=10),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/sam_openpi_solder2",
+            base_config=DataConfig(
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),         
     #
     # Inference Aloha configs.
     #
@@ -633,6 +824,41 @@ _CONFIGS = [
         exp_name="debug",
         num_train_steps=10,
         wandb_enabled=False,
+    ),
+    TrainConfig(
+        name="demo3_frames_grab3",
+        model=pi0.Pi0Config(action_horizon=10),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/demo3_frames_grab3",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="demo3_frames_grab3_8_h100",
+        model=pi0.Pi0Config(action_horizon=10),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/demo3_frames_grab3",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("s3://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=1000,
+        batch_size=1024,
+        log_interval = 5,
+        save_interval = 300,
+        fsdp_devices=8,
+        num_workers=8,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=64,
+            decay_steps=850,
+            peak_lr=1.4e-4,
+            decay_lr = 1.4e-5
+        )
     ),
 ]
 
