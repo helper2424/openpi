@@ -11,7 +11,6 @@ from typing import Any, Literal, Protocol, TypeAlias
 import etils.epath as epath
 import flax.nnx as nnx
 from typing_extensions import override
-from openpi.policies import sam_policy
 import tyro
 
 import openpi.models.model as _model
@@ -551,7 +550,10 @@ class TrainConfig:
 class LeRobotSAMDataConfig(DataConfigFactory):
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
-            # Repack transforms.
+        # Import here to avoid circular imports.
+        from openpi.policies import sam_policy
+
+        # Repack transforms.
         repack_transform = _transforms.Group(
             inputs=[
                 _transforms.RepackTransform(
@@ -561,7 +563,7 @@ class LeRobotSAMDataConfig(DataConfigFactory):
                         "side": "observation.images.side",
                         "state": "observation.state",
                         "actions": "action",
-                    }               
+                    }
                 )
             ]
         )
