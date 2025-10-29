@@ -96,9 +96,20 @@ class RTCDatasetEvaluator:
             logging.warning("Actions have unexpected shape, skipping evaluation")
             return {}
 
-        # Use the observation directly from data loader
-        # The data loader already handles repacking through repack_transforms
-        obs = second_observation
+        # Convert observation to dict - transforms expect dict format
+        # The data loader's repack_transforms already structure the data correctly
+        obs = second_observation.to_dict()
+
+        # Extract first item from batch
+        # Recursively handle nested structures
+        def extract_first(x):
+            if isinstance(x, dict):
+                return {k: extract_first(v) for k, v in x.items()}
+            elif isinstance(x, (np.ndarray, list, tuple)) and len(x) > 0:
+                return x[0]
+            return x
+
+        obs = extract_first(obs)
 
         # Generate noise for inference
         noise = np.random.randn(self.cfg.action_horizon, self.cfg.action_dim).astype(np.float32)
