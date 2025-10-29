@@ -96,36 +96,9 @@ class RTCDatasetEvaluator:
             logging.warning("Actions have unexpected shape, skipping evaluation")
             return {}
 
-        # Convert second observation to dict format for policy inference
-        # The Observation object has a to_dict() method
-        obs = second_observation.to_dict()
-
-        # Get the first item from the batch
-        # Need to handle nested dicts (like images with laptop/phone/side keys)
-        def extract_first_item(x):
-            if isinstance(x, dict):
-                return {k: extract_first_item(v) for k, v in x.items()}
-            elif isinstance(x, (np.ndarray, jnp.ndarray, list, tuple)):
-                return x[0]
-            else:
-                return x
-
-        obs = extract_first_item(obs)
-
-        # Flatten nested dict structure to match expected keys
-        # Convert {"images": {"laptop": ...}} to {"laptop": ...}
-        def flatten_obs(obs_dict):
-            result = {}
-            for key, value in obs_dict.items():
-                if isinstance(value, dict):
-                    # Flatten nested dicts
-                    for nested_key, nested_value in value.items():
-                        result[nested_key] = nested_value
-                else:
-                    result[key] = value
-            return result
-
-        obs = flatten_obs(obs)
+        # Use the observation directly from data loader
+        # The data loader already handles repacking through repack_transforms
+        obs = second_observation
 
         # Generate noise for inference
         noise = np.random.randn(self.cfg.action_horizon, self.cfg.action_dim).astype(np.float32)
