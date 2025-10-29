@@ -184,6 +184,18 @@ class Args:
         metadata={"help": "Random seed for reproducibility"},
     )
 
+    # Action dimension
+    action_dim: int = field(
+        default=7,
+        metadata={"help": "Action dimension"},
+    )
+
+    # Additional sample kwargs to pass to the model
+    sample_kwargs: dict[str, Any] | None = field(
+        default=None,
+        metadata={"help": "Additional kwargs to pass to sample_actions"},
+    )
+
     # Inference delay
     inference_delay: int = 1
     
