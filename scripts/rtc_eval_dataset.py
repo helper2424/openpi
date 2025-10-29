@@ -101,7 +101,16 @@ class RTCDatasetEvaluator:
         obs = second_observation.to_dict()
 
         # Get the first item from the batch
-        obs = {k: v[0] if hasattr(v, '__getitem__') else v for k, v in obs.items()}
+        # Need to handle nested dicts (like images with laptop/phone/side keys)
+        def extract_first_item(x):
+            if isinstance(x, dict):
+                return {k: extract_first_item(v) for k, v in x.items()}
+            elif isinstance(x, (np.ndarray, jnp.ndarray, list, tuple)):
+                return x[0]
+            else:
+                return x
+
+        obs = extract_first_item(obs)
 
         # Generate noise for inference
         noise = np.random.randn(self.cfg.action_horizon, self.cfg.action_dim).astype(np.float32)
