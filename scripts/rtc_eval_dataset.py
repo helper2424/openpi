@@ -87,9 +87,6 @@ class RTCDatasetEvaluator:
         first_sample = self.dataset[selected_indices[0]]
         second_sample = self.dataset[selected_indices[1]]
 
-        print("first_sample", first_sample)
-        print("second_sample", second_sample)
-
         # Extract actions from first sample
         # Take only first half of actions for comparison
         prev_chunk_left_over = np.array(first_sample["actions"])
@@ -118,7 +115,14 @@ class RTCDatasetEvaluator:
 
         # Inference using the policy
         # Note: The pi0 model's inference is handled through the Policy.infer method
-        result = self.policy.infer(obs, noise=noise, inference_delay=self.cfg.inference_delay, prev_chunk_left_over=prev_chunk_left_over)
+        # execution_horizon is required even if RTC is not enabled in the model
+        result = self.policy.infer(
+            obs,
+            noise=noise,
+            inference_delay=self.cfg.inference_delay,
+            prev_chunk_left_over=prev_chunk_left_over,
+            execution_horizon=self.cfg.execution_horizon
+        )
         actions = result["actions"]
 
         # Create visualization
@@ -205,6 +209,12 @@ class Args:
 
     # Inference delay
     inference_delay: int = 1
+
+    # Execution horizon for RTC
+    execution_horizon: int = field(
+        default=10,
+        metadata={"help": "Execution horizon for RTC (number of timesteps for prefix weights)"},
+    )
     
 def main(args: Args):
     """Main entry point for RTC dataset evaluation."""
