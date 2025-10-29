@@ -83,32 +83,25 @@ class RTCDatasetEvaluator:
         logging.info(f"Selected episodes at indices: {selected_indices}")
 
         # Get the two selected episodes
-        first_episode = all_episodes[selected_indices[0]]
-        second_episode = all_episodes[selected_indices[1]]
+        # Data loader returns (Observation, actions) tuple
+        first_observation, first_actions = all_episodes[selected_indices[0]]
+        second_observation, second_actions = all_episodes[selected_indices[1]]
 
         # Extract actions from first episode
-        prev_chunk_left_over = first_episode.get("actions")
-        if prev_chunk_left_over is None and "action" in first_episode:
-            prev_chunk_left_over = np.array(first_episode["action"])
-
-        if prev_chunk_left_over is not None:
-            # Take only first half of actions for comparison
+        # Take only first half of actions for comparison
+        prev_chunk_left_over = np.array(first_actions[0])  # Get first batch item
+        if len(prev_chunk_left_over.shape) > 1:
             prev_chunk_left_over = prev_chunk_left_over[:self.cfg.action_horizon // 2]
         else:
-            logging.warning("No actions found in first episode, skipping evaluation")
+            logging.warning("Actions have unexpected shape, skipping evaluation")
             return {}
 
-        # Convert second episode to proper format
-        # Note: This assumes the dataset returns observations in a specific format
-        # You may need to adjust this based on your dataset structure
-        obs = {
-            "observation/image": np.array(second_episode.get("observation.images.top", second_episode.get("observation/image"))),
-            "observation/state": np.array(second_episode.get("observation.state", [])),
-        }
+        # Convert second observation to dict format for policy inference
+        # The Observation object has a to_dict() method
+        obs = second_observation.to_dict()
 
-        # Add prompt if available
-        if "prompt" in second_episode or "task" in second_episode:
-            obs["prompt"] = second_episode.get("prompt", second_episode.get("task", ""))
+        # Get the first item from the batch
+        obs = {k: v[0] if hasattr(v, '__getitem__') else v for k, v in obs.items()}
 
         # Generate noise for inference
         noise = np.random.randn(self.cfg.action_horizon, self.cfg.action_dim).astype(np.float32)
