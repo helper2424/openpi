@@ -1,6 +1,9 @@
 import enum
 import dataclasses
 
+import jax
+import jax.numpy as jnp
+
 class RTCAttentionSchedule(str, enum.Enum):
     ZEROS = "ZEROS"
     ONES = "ONES"
