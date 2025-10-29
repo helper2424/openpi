@@ -111,7 +111,9 @@ class RTCDatasetEvaluator:
                 logging.info(f"  {key}: type={type(value)}")
 
         # Generate noise for inference
-        noise = np.random.randn(self.cfg.action_horizon, self.cfg.action_dim).astype(np.float32)
+        # Use model's action_dim (which may be padded) instead of raw action_dim
+        model_action_dim = self.train_cfg.model.action_dim
+        noise = np.random.randn(self.cfg.action_horizon, model_action_dim).astype(np.float32)
 
         # Inference using the policy
         # Note: The pi0 model's inference is handled through the Policy.infer method
