@@ -49,10 +49,12 @@ class RTCDatasetEvaluator:
         logging.info(f"Model config: {self.train_cfg.model}")
 
         # Create data loader using the training config
+        # Only load 2 batches for evaluation
         self.data_loader = _data_loader.create_data_loader(
             self.train_cfg,
             shuffle=True,
             skip_norm_stats=True,  # Skip normalization for evaluation
+            num_batches=2,  # Only load 2 batches for efficiency
         )
 
         logging.info(f"Dataloader created successfully")
@@ -63,14 +65,14 @@ class RTCDatasetEvaluator:
         Returns:
             Dictionary with aggregated metrics and detailed results
         """
-        logging.info(f"Collecting episodes from dataloader to select 2 random episodes")
+        logging.info(f"Loading 2 episodes from dataloader")
 
-        # Collect all episodes from the dataloader
+        # Load only 2 batches for efficiency
         all_episodes = []
         for batch in self.data_loader:
-            # Each batch may contain multiple episodes
-            # Store the batch data for later random selection
             all_episodes.append(batch)
+
+        logging.info(f"Loaded {len(all_episodes)} episodes")
 
         if len(all_episodes) < 2:
             logging.error(f"Not enough episodes in dataloader. Found {len(all_episodes)}, need at least 2")
