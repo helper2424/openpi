@@ -328,7 +328,7 @@ We will collect common issues and their solutions here. If you encounter an issu
 ```
  git pull origin  ; uv run python scripts/rtc_eval_dataset.py \
     --train-config-name cables10 \
-    --checkpoint-path ./checkpoints/your_model \
+    --checkpoint-path /home/ubuntu/data/cables10/ \
     --dataset-repo-id 1g0rrr/cables10 \
     --seed 42     
 ```
