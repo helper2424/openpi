@@ -36,21 +36,23 @@ class RTCDatasetEvaluator:
 
         # Load the training config to get model configuration
         logging.info(f"Loading policy from {cfg.checkpoint_path}")
-        train_cfg = train_config.get_config(cfg.train_config_name)
+        self.train_cfg = train_config.get_config(cfg.train_config_name)
 
         # Load policy using the openpi policy_config
         self.policy = policy_config.create_trained_policy(
-            train_config=train_cfg,
+            train_config=self.train_cfg,
             checkpoint_dir=pathlib.Path(cfg.checkpoint_path),
             sample_kwargs=cfg.sample_kwargs or {},
         )
 
         logging.info(f"Policy loaded successfully")
-        logging.info(f"Model config: {train_cfg.model}")
+        logging.info(f"Model config: {self.train_cfg.model}")
 
+        # Create data loader using the training config
         self.data_loader = _data_loader.create_data_loader(
-            self.cfg,
+            self.train_cfg,
             shuffle=True,
+            skip_norm_stats=True,  # Skip normalization for evaluation
         )
 
         logging.info(f"Dataloader created successfully")
