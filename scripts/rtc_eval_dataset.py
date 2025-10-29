@@ -87,6 +87,9 @@ class RTCDatasetEvaluator:
         first_sample = self.dataset[selected_indices[0]]
         second_sample = self.dataset[selected_indices[1]]
 
+        print("first_sample", first_sample)
+        print("second_sample", second_sample)
+
         # Extract actions from first sample
         # Take only first half of actions for comparison
         prev_chunk_left_over = np.array(first_sample["actions"])
