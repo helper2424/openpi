@@ -48,13 +48,20 @@ class RTCDatasetEvaluator:
         logging.info(f"Policy loaded successfully")
         logging.info(f"Model config: {self.train_cfg.model}")
 
-        # Create data loader using the training config
-        # Only load 2 batches for evaluation
-        self.data_loader = _data_loader.create_data_loader(
-            self.train_cfg,
-            shuffle=True,
-            skip_norm_stats=True,  # Skip normalization for evaluation
-            num_batches=2,  # Only load 2 batches for efficiency
+        # Create raw dataset without transforms for inference
+        # We'll use policy.infer() which applies transforms itself
+        self.data_config = self.train_cfg.data.create(self.train_cfg.assets_dirs, self.train_cfg.model)
+        self.raw_dataset = _data_loader.create_torch_dataset(
+            self.data_config,
+            self.train_cfg.model.action_horizon,
+            self.train_cfg.model
+        )
+
+        # Apply only repack transforms to get the right key structure
+        # Skip data_transforms and model_transforms since policy.infer() will apply them
+        self.dataset = _data_loader.TransformedDataset(
+            self.raw_dataset,
+            list(self.data_config.repack_transforms.inputs)
         )
 
         logging.info(f"Dataloader created successfully")
@@ -65,57 +72,41 @@ class RTCDatasetEvaluator:
         Returns:
             Dictionary with aggregated metrics and detailed results
         """
-        logging.info(f"Loading 2 episodes from dataloader")
+        # Randomly select 2 samples from the dataset
+        dataset_size = len(self.dataset)
+        logging.info(f"Dataset size: {dataset_size}")
 
-        # Load only 2 batches for efficiency
-        all_episodes = []
-        for batch in self.data_loader:
-            all_episodes.append(batch)
-
-        logging.info(f"Loaded {len(all_episodes)} episodes")
-
-        if len(all_episodes) < 2:
-            logging.error(f"Not enough episodes in dataloader. Found {len(all_episodes)}, need at least 2")
+        if dataset_size < 2:
+            logging.error(f"Not enough samples in dataset. Found {dataset_size}, need at least 2")
             return {}
 
-        # Randomly select 2 episodes
-        selected_indices = random.sample(range(len(all_episodes)), 2)
-        logging.info(f"Selected episodes at indices: {selected_indices}")
+        selected_indices = random.sample(range(dataset_size), 2)
+        logging.info(f"Selected samples at indices: {selected_indices}")
 
-        # Get the two selected episodes
-        # Data loader returns (Observation, actions) tuple
-        first_observation, first_actions = all_episodes[selected_indices[0]]
-        second_observation, second_actions = all_episodes[selected_indices[1]]
+        # Get the two selected samples
+        first_sample = self.dataset[selected_indices[0]]
+        second_sample = self.dataset[selected_indices[1]]
 
-        # Extract actions from first episode
+        # Extract actions from first sample
         # Take only first half of actions for comparison
-        prev_chunk_left_over = np.array(first_actions[0])  # Get first batch item
+        prev_chunk_left_over = np.array(first_sample["actions"])
         if len(prev_chunk_left_over.shape) > 1:
             prev_chunk_left_over = prev_chunk_left_over[:self.cfg.action_horizon // 2]
         else:
             logging.warning("Actions have unexpected shape, skipping evaluation")
             return {}
 
-        # Convert observation to dict - transforms expect dict format
-        # The data loader's repack_transforms already structure the data correctly
-        obs = second_observation.to_dict()
-
-        # Extract first item from batch
-        # Recursively handle nested structures
-        def extract_first(x):
-            if isinstance(x, dict):
-                return {k: extract_first(v) for k, v in x.items()}
-            elif isinstance(x, (np.ndarray, list, tuple)) and len(x) > 0:
-                return x[0]
-            return x
-
-        obs = extract_first(obs)
+        # Prepare observation dict for policy.infer()
+        # Remove actions key since policy.infer() doesn't need it
+        obs = {k: v for k, v in second_sample.items() if k != "actions"}
 
         # Debug: print observation keys
         logging.info(f"Observation keys: {list(obs.keys())}")
         for key, value in obs.items():
             if isinstance(value, (np.ndarray, list)):
                 logging.info(f"  {key}: shape={np.array(value).shape if hasattr(value, 'shape') or isinstance(value, list) else 'N/A'}, type={type(value)}")
+            elif isinstance(value, dict):
+                logging.info(f"  {key}: nested dict with keys {list(value.keys())}")
             else:
                 logging.info(f"  {key}: type={type(value)}")
 
