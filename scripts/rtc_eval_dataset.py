@@ -111,6 +111,14 @@ class RTCDatasetEvaluator:
 
         obs = extract_first(obs)
 
+        # Debug: print observation keys
+        logging.info(f"Observation keys: {list(obs.keys())}")
+        for key, value in obs.items():
+            if isinstance(value, (np.ndarray, list)):
+                logging.info(f"  {key}: shape={np.array(value).shape if hasattr(value, 'shape') or isinstance(value, list) else 'N/A'}, type={type(value)}")
+            else:
+                logging.info(f"  {key}: type={type(value)}")
+
         # Generate noise for inference
         noise = np.random.randn(self.cfg.action_horizon, self.cfg.action_dim).astype(np.float32)
 
