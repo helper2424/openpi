@@ -255,7 +255,11 @@ class Pi0(_model.BaseModel):
 
             inference_delay = kwargs.get("inference_delay")
             prev_chunk_left_over = kwargs.get("prev_chunk_left_over")
-            execution_horizon = kwargs.get("execution_horizon", self.config.rtc_config.execution_horizon)
+            # Use rtc_config.execution_horizon as default only if rtc_config is not None
+            execution_horizon = kwargs.get(
+                "execution_horizon",
+                self.config.rtc_config.execution_horizon if self.config.rtc_config is not None else 10
+            )
 
             if self.config.rtc_config is not None and self.config.rtc_config.enabled:
                 @functools.partial(jax.vmap, in_axes=(0, 0, 0, None))  # over batch
