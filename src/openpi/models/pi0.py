@@ -292,7 +292,7 @@ class Pi0(_model.BaseModel):
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
                     weights = self.rtc_processor.get_prefix_weights(
-                        inference_delay, self.config.rtc_config.execution_horizon, self.action_chunk_size, self.config.rtc_config.prefix_attention_schedule
+                        inference_delay, execution_horizon, self.action_chunk_size, self.config.rtc_config.prefix_attention_schedule
                     )
                     error = (y - x_1) * weights[:, None]
                     pinv_correction = vjp_fun(error)[0]
@@ -303,7 +303,7 @@ class Pi0(_model.BaseModel):
                 
                     v_t = v_t + guidance_weight * pinv_correction
                 
-                v_t = pinv_corrected_velocity(observation, x_t, prev_action_chunk, time)
+                v_t = pinv_corrected_velocity(observation, x_t, prev_chunk_left_over, time)
             else:
                 suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
                     observation, x_t, jnp.broadcast_to(time, batch_size)

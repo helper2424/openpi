@@ -14,13 +14,18 @@ import tyro
 
 from openpi.policies import policy_config
 from openpi.training import config as train_config
+import openpi.training.data_loader as _data_loader
 
 
 def set_seed(seed: int):
     """Set random seed for reproducibility."""
     random.seed(seed)
     np.random.seed(seed)
+    # JAX uses explicit PRNG keys, but we can set the default behavior
+    key = jax.random.PRNGKey(seed)
     logging.info(f"Random seed set to: {seed}")
+    logging.info(f"JAX PRNG key initialized with seed: {seed}")
+    return key
 
 
 class RTCDatasetEvaluator:
@@ -43,19 +48,12 @@ class RTCDatasetEvaluator:
         logging.info(f"Policy loaded successfully")
         logging.info(f"Model config: {train_cfg.model}")
 
-        # Load dataset - using lerobot if available
-        try:
-            from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
-            logging.info(f"Loading dataset: {cfg.dataset_repo_id}")
-            self.dataset = LeRobotDataset(
-                cfg.dataset_repo_id,
-                delta_timestamps={"action": np.arange(cfg.action_horizon) / 30}
-            )
-            logging.info(f"Dataset loaded: {len(self.dataset)} samples, {self.dataset.num_episodes} episodes")
-        except ImportError:
-            raise ImportError(
-                "lerobot package not found. Please install it with: pip install lerobot"
-            )
+        self.data_loader = _data_loader.create_data_loader(
+            self.cfg,
+            shuffle=True,
+        )
+
+        logging.info(f"Dataloader created successfully")
 
     def run_evaluation(self) -> dict:
         """Run full evaluation on dataset.
@@ -63,60 +61,74 @@ class RTCDatasetEvaluator:
         Returns:
             Dictionary with aggregated metrics and detailed results
         """
-        logging.info(f"Starting evaluation on {self.cfg.num_samples} samples")
+        logging.info(f"Collecting episodes from dataloader to select 2 random episodes")
 
-        prev_chunk_left_over = None
+        # Collect all episodes from the dataloader
+        all_episodes = []
+        for batch in self.data_loader:
+            # Each batch may contain multiple episodes
+            # Store the batch data for later random selection
+            all_episodes.append(batch)
 
-        for i in range(self.cfg.num_samples):
-            # Get a random sample from the dataset
-            idx = np.random.randint(0, len(self.dataset))
-            sample = self.dataset[idx]
+        if len(all_episodes) < 2:
+            logging.error(f"Not enough episodes in dataloader. Found {len(all_episodes)}, need at least 2")
+            return {}
 
-            # Convert sample to proper format
-            # Note: This assumes the dataset returns observations in a specific format
-            # You may need to adjust this based on your dataset structure
-            obs = {
-                "observation/image": np.array(sample.get("observation.images.top", sample.get("observation/image"))),
-                "observation/state": np.array(sample.get("observation.state", [])),
-            }
+        # Randomly select 2 episodes
+        selected_indices = random.sample(range(len(all_episodes)), 2)
+        logging.info(f"Selected episodes at indices: {selected_indices}")
 
-            # Add prompt if available
-            if "prompt" in sample or "task" in sample:
-                obs["prompt"] = sample.get("prompt", sample.get("task", ""))
+        # Get the two selected episodes
+        first_episode = all_episodes[selected_indices[0]]
+        second_episode = all_episodes[selected_indices[1]]
 
-            if i % 2 == 0:
-                # Store actions from this sample for comparison
-                if "action" in sample:
-                    actions = np.array(sample["action"])
-                    prev_chunk_left_over = actions[:self.cfg.action_horizon // 2]
-                continue
+        # Extract actions from first episode
+        prev_chunk_left_over = first_episode.get("actions")
+        if prev_chunk_left_over is None and "action" in first_episode:
+            prev_chunk_left_over = np.array(first_episode["action"])
 
-            if prev_chunk_left_over is None:
-                continue
+        if prev_chunk_left_over is not None:
+            # Take only first half of actions for comparison
+            prev_chunk_left_over = prev_chunk_left_over[:self.cfg.action_horizon // 2]
+        else:
+            logging.warning("No actions found in first episode, skipping evaluation")
+            return {}
 
-            # Generate noise for both runs (same noise for fair comparison)
-            noise = np.random.randn(self.cfg.action_horizon, self.cfg.action_dim).astype(np.float32)
+        # Convert second episode to proper format
+        # Note: This assumes the dataset returns observations in a specific format
+        # You may need to adjust this based on your dataset structure
+        obs = {
+            "observation/image": np.array(second_episode.get("observation.images.top", second_episode.get("observation/image"))),
+            "observation/state": np.array(second_episode.get("observation.state", [])),
+        }
 
-            # Inference using the policy
-            # Note: The pi0 model's inference is handled through the Policy.infer method
-            result = self.policy.infer(obs, noise=noise)
-            actions = result["actions"]
+        # Add prompt if available
+        if "prompt" in second_episode or "task" in second_episode:
+            obs["prompt"] = second_episode.get("prompt", second_episode.get("task", ""))
 
-            # Create visualization
-            fig, axs = plt.subplots(min(6, self.cfg.action_dim), 1, figsize=(12, 12))
-            if self.cfg.action_dim == 1:
-                axs = [axs]
-            fig.suptitle(f"Sample {i} - Action Prediction", fontsize=16)
+        # Generate noise for inference
+        noise = np.random.randn(self.cfg.action_horizon, self.cfg.action_dim).astype(np.float32)
 
-            # Plot actions
-            self.axs = axs
-            self.plot_waypoints(prev_chunk_left_over, label="Previous Actions", color="green")
-            self.plot_waypoints(actions, label="Predicted Actions", color="blue")
+        # Inference using the policy
+        # Note: The pi0 model's inference is handled through the Policy.infer method
+        result = self.policy.infer(obs, noise=noise, inference_delay=self.cfg.inference_delay, prev_chunk_left_over=prev_chunk_left_over)
+        actions = result["actions"]
 
-            plt.tight_layout()
-            plt.savefig(f"actions_sample_{i}.png", dpi=150)
-            logging.info(f"Saved actions for sample {i} to actions_sample_{i}.png")
-            plt.close(fig)
+        # Create visualization
+        fig, axs = plt.subplots(min(6, self.cfg.action_dim), 1, figsize=(12, 12))
+        if self.cfg.action_dim == 1:
+            axs = [axs]
+        fig.suptitle(f"Episodes {selected_indices[0]} & {selected_indices[1]} - Action Prediction", fontsize=16)
+
+        # Plot actions
+        self.axs = axs
+        self.plot_waypoints(prev_chunk_left_over, label="Previous Actions (Episode 1)", color="green")
+        self.plot_waypoints(actions, label="Predicted Actions (Episode 2)", color="blue")
+
+        plt.tight_layout()
+        plt.savefig(f"actions_episodes_{selected_indices[0]}_{selected_indices[1]}.png", dpi=150)
+        logging.info(f"Saved actions comparison to actions_episodes_{selected_indices[0]}_{selected_indices[1]}.png")
+        plt.close(fig)
 
         logging.info("Evaluation completed")
         return {}
@@ -155,18 +167,6 @@ class Args:
         metadata={"help": "HuggingFace repo ID for the LeRobot dataset"}
     )
 
-    # Number of samples to evaluate
-    num_samples: int = field(
-        default=10,
-        metadata={"help": "Number of samples to evaluate"},
-    )
-
-    # Action dimensions
-    action_dim: int = field(
-        default=7,
-        metadata={"help": "Action dimension"},
-    )
-
     action_horizon: int = field(
         default=50,
         metadata={"help": "Action horizon (chunk size)"},
@@ -178,22 +178,19 @@ class Args:
         metadata={"help": "Default prompt to use if not present in the data"},
     )
 
-    # Additional sample kwargs to pass to the model
-    sample_kwargs: dict[str, Any] | None = field(
-        default=None,
-        metadata={"help": "Additional kwargs to pass to sample_actions"},
-    )
-
     # Seed configuration
     seed: int = field(
         default=42,
         metadata={"help": "Random seed for reproducibility"},
     )
+
+    # Inference delay
+    inference_delay: int = 1
     
 def main(args: Args):
     """Main entry point for RTC dataset evaluation."""
     # Set random seed for reproducibility
-    set_seed(args.seed)
+    rng_key = set_seed(args.seed)
 
     logging.info("=" * 80)
     logging.info("Pi0 Dataset Evaluation with JAX")
@@ -201,8 +198,6 @@ def main(args: Args):
     logging.info(f"Training config: {args.train_config_name}")
     logging.info(f"Checkpoint: {args.checkpoint_path}")
     logging.info(f"Dataset: {args.dataset_repo_id}")
-    logging.info(f"Num samples: {args.num_samples}")
-    logging.info(f"Action dim: {args.action_dim}")
     logging.info(f"Action horizon: {args.action_horizon}")
     logging.info(f"Seed: {args.seed}")
     logging.info("=" * 80)

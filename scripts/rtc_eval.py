@@ -503,6 +503,7 @@ def stop_by_duration(shutdown_event: Event, cfg: RTCDemoConfig):
 def main(args: Args) -> None:
     """Main entry point for RTC demo with draccus configuration."""
 
+    print("WTF?")
     logging.info(f"Using device: {args.device}")
 
     policy = None
