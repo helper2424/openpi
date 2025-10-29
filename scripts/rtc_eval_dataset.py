@@ -131,8 +131,10 @@ class RTCDatasetEvaluator:
         actions = result["actions"]
 
         # Create visualization
-        fig, axs = plt.subplots(min(6, self.cfg.action_dim), 1, figsize=(12, 12))
-        if self.cfg.action_dim == 1:
+        # Use min of 6 and model's action_dim for plots
+        num_plots = min(6, model_action_dim)
+        fig, axs = plt.subplots(num_plots, 1, figsize=(12, 12))
+        if num_plots == 1:
             axs = [axs]
         fig.suptitle(f"Episodes {selected_indices[0]} & {selected_indices[1]} - Action Prediction", fontsize=16)
 
@@ -150,7 +152,9 @@ class RTCDatasetEvaluator:
         return {}
 
     def plot_waypoints(self, chunk, start_from: int = 0, color: str | None = None, label: str | None = None):
-        for j in range(chunk.shape[-1]):
+        # Only plot as many dimensions as we have subplots
+        num_dims_to_plot = min(len(self.axs), chunk.shape[-1])
+        for j in range(num_dims_to_plot):
             self.axs[j].plot(
                 np.arange(start_from, start_from + chunk.shape[0]),
                 chunk[:, j],
