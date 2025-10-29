@@ -112,6 +112,21 @@ class RTCDatasetEvaluator:
 
         obs = extract_first_item(obs)
 
+        # Flatten nested dict structure to match expected keys
+        # Convert {"images": {"laptop": ...}} to {"laptop": ...}
+        def flatten_obs(obs_dict):
+            result = {}
+            for key, value in obs_dict.items():
+                if isinstance(value, dict):
+                    # Flatten nested dicts
+                    for nested_key, nested_value in value.items():
+                        result[nested_key] = nested_value
+                else:
+                    result[key] = value
+            return result
+
+        obs = flatten_obs(obs)
+
         # Generate noise for inference
         noise = np.random.randn(self.cfg.action_horizon, self.cfg.action_dim).astype(np.float32)
 
