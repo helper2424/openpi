@@ -88,10 +88,12 @@ class RTCDatasetEvaluator:
         second_sample = self.dataset[selected_indices[1]]
 
         # Extract actions from first sample
-        # Take only first half of actions for comparison
+        # Take only first half based on model's action_horizon, not cfg
+        model_action_horizon = self.train_cfg.model.action_horizon
         prev_chunk_left_over = np.array(first_sample["actions"])
         if len(prev_chunk_left_over.shape) > 1:
-            prev_chunk_left_over = prev_chunk_left_over[:self.cfg.action_horizon // 2]
+            # Take first half based on model's action horizon
+            prev_chunk_left_over = prev_chunk_left_over[:model_action_horizon // 2]
         else:
             logging.warning("Actions have unexpected shape, skipping evaluation")
             return {}
@@ -111,9 +113,10 @@ class RTCDatasetEvaluator:
                 logging.info(f"  {key}: type={type(value)}")
 
         # Generate noise for inference
-        # Use model's action_dim (which may be padded) instead of raw action_dim
+        # Use model's action_horizon and action_dim, not cfg values
+        model_action_horizon = self.train_cfg.model.action_horizon
         model_action_dim = self.train_cfg.model.action_dim
-        noise = np.random.randn(self.cfg.action_horizon, model_action_dim).astype(np.float32)
+        noise = np.random.randn(model_action_horizon, model_action_dim).astype(np.float32)
 
         # Inference using the policy
         # Note: The pi0 model's inference is handled through the Policy.infer method
