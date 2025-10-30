@@ -342,9 +342,19 @@ class Pi0(_model.BaseModel):
                         return (x_t_batched + v_t * (1 - t))[0], v_t[0]
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
+
+                    # Debug logging for weights calculation
+                    jax.debug.print("get_prefix_weights args - start: {}, end: {}, total: {}, schedule: {}",
+                                  inference_delay, execution_horizon, self.action_horizon,
+                                  self.rtc_processor.rtc_config.prefix_attention_schedule)
+
                     weights = self.rtc_processor.get_prefix_weights(
                         inference_delay, execution_horizon, self.action_horizon, self.rtc_processor.rtc_config.prefix_attention_schedule
                     )
+
+                    jax.debug.print("weights computed: {}", weights)
+                    jax.debug.print("weights sum: {}, max: {}, min: {}", jnp.sum(weights), jnp.max(weights), jnp.min(weights))
+
                     error = (y - x_1) * weights[:, None]
                     pinv_correction = vjp_fun(error)[0]
                     # constants from paper

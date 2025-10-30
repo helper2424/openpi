@@ -78,7 +78,14 @@ class RTCProcessor:
         elif schedule == RTCAttentionSchedule.ZEROS:
             w = (jnp.arange(total) < start).astype(jnp.float32)
         elif schedule == RTCAttentionSchedule.LINEAR or schedule == RTCAttentionSchedule.EXP:
-            w = jnp.clip((start - 1 - jnp.arange(total)) / (end - start + 1) + 1, 0, 1)
+            # For positions < start: weight = 1
+            # For positions >= start and < end: linearly decrease from 1 to 0
+            # For positions >= end: weight = 0
+            w = jnp.where(
+                jnp.arange(total) < start,
+                1.0,
+                jnp.clip((end - jnp.arange(total)) / (end - start), 0, 1)
+            )
             if schedule == RTCAttentionSchedule.EXP:
                 w = w * jnp.expm1(w) / (jnp.e - 1)
         return jnp.where(jnp.arange(total) >= end, 0, w)
