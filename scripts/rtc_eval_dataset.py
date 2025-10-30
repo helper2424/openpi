@@ -137,6 +137,7 @@ class RTCDatasetEvaluator:
         original_rtc_processor = self.policy._model.rtc_processor
         self.policy._model.rtc_processor = None
 
+        logging.info(f"original_rtc_processor: {original_rtc_processor}")
         result_no_rtc = self.policy.infer(
             obs,
             noise=noise,
