@@ -158,11 +158,9 @@ class RTCDatasetEvaluator:
             noise=noise,
             inference_delay=self.cfg.inference_delay,
             prev_chunk_left_over=prev_chunk_left_over,
-            execution_horizon=self.cfg.execution_horizon,
-            track_rtc=True  # Enable tracking for debugging
+            execution_horizon=self.cfg.execution_horizon
         )
         actions_no_rtc = result_no_rtc["actions"]
-        tracking_no_rtc = result_no_rtc.get("rtc_tracking", None)
 
         # ========== Run inference WITH RTC ==========
         logging.info("=" * 80)
@@ -185,11 +183,9 @@ class RTCDatasetEvaluator:
             noise=noise,
             inference_delay=self.cfg.inference_delay,
             prev_chunk_left_over=prev_chunk_left_over,
-            execution_horizon=self.cfg.execution_horizon,
-            track_rtc=True  # Enable tracking for debugging
+            execution_horizon=self.cfg.execution_horizon
         )
         actions_rtc = result_rtc["actions"]
-        tracking_rtc = result_rtc.get("rtc_tracking", None)
 
         # ========== Create side-by-side visualization ==========
         # Use min of 6 and model's action_dim for plots
@@ -225,9 +221,8 @@ class RTCDatasetEvaluator:
         logging.info(f"Saved RTC comparison to {filename}")
         plt.close(fig)
 
-        # ========== Create detailed RTC tracking visualization ==========
-        if tracking_rtc:
-            self.visualize_rtc_tracking(tracking_rtc, selected_indices)
+        # Note: Detailed tracking disabled due to JAX compilation constraints
+        # JAX doesn't allow Python conditionals on traced values inside compiled functions
 
         logging.info("Evaluation completed")
         return {}

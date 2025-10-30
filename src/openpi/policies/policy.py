@@ -90,36 +90,18 @@ class Policy(BasePolicy):
         observation = _model.Observation.from_dict(inputs)
         start_time = time.monotonic()
 
-        # Call sample_actions which may return either actions or (actions, tracking_data)
-        sample_result = self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs, **kwargs)
-
-        # Handle both return types
-        if isinstance(sample_result, tuple):
-            actions, rtc_tracking = sample_result
-            outputs = {
-                "state": inputs["state"],
-                "actions": actions,
-                "rtc_tracking": rtc_tracking,
-            }
-        else:
-            outputs = {
-                "state": inputs["state"],
-                "actions": sample_result,
-            }
+        # Call sample_actions
+        outputs = {
+            "state": inputs["state"],
+            "actions": self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs, **kwargs),
+        }
 
         model_time = time.monotonic() - start_time
-
-        # Extract rtc_tracking if present before transforming outputs
-        rtc_tracking = outputs.pop("rtc_tracking", None)
 
         if self._is_pytorch_model:
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
         else:
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
-
-        # Add rtc_tracking back if it was present
-        if rtc_tracking is not None:
-            outputs["rtc_tracking"] = rtc_tracking
 
         outputs = self._output_transform(outputs)
         outputs["policy_timing"] = {
