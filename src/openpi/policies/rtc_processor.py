@@ -70,14 +70,12 @@ class RTCProcessor:
         if `end` is 0, then the entire prefix will always be ignored.
         """
         start = jnp.minimum(start, end)
-        if schedule == "ones":
+        if schedule == RTCAttentionSchedule.ONES:
             w = jnp.ones(total)
-        elif schedule == "zeros":
+        elif schedule == RTCAttentionSchedule.ZEROS:
             w = (jnp.arange(total) < start).astype(jnp.float32)
-        elif schedule == "linear" or schedule == "exp":
+        elif schedule == RTCAttentionSchedule.LINEAR or schedule == RTCAttentionSchedule.EXP:
             w = jnp.clip((start - 1 - jnp.arange(total)) / (end - start + 1) + 1, 0, 1)
-            if schedule == "exp":
+            if schedule == RTCAttentionSchedule.EXP:
                 w = w * jnp.expm1(w) / (jnp.e - 1)
-        else:
-            raise ValueError(f"Invalid schedule: {schedule}")
         return jnp.where(jnp.arange(total) >= end, 0, w)
