@@ -274,39 +274,50 @@ class Pi0(_model.BaseModel):
                 jax.debug.print("execution_horizon: {}", execution_horizon)
                 jax.debug.print("time: {}", time)
 
-                @functools.partial(jax.vmap, in_axes=(0, 0, 0, None))  # over batch
-                def pinv_corrected_velocity(obs, x_t, y, t):
+                @functools.partial(jax.vmap, in_axes=(0, 0, 0, None, 0, 0, 0))  # over batch
+                def pinv_corrected_velocity(obs, x_t, y, t, prefix_tokens_i, prefix_mask_i, kv_cache_i):
                     def denoiser(x_t):
+                        # Add batch dimension since embed_suffix expects batched inputs
+                        x_t_batched = x_t[None, ...]  # (action_horizon, action_dim) -> (1, action_horizon, action_dim)
+                        # Add batch dimension to obs by tree mapping
+                        obs_batched = jax.tree.map(lambda x: x[None, ...], obs)
+
                         suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
-                            observation, x_t, jnp.broadcast_to(time, batch_size)
+                            obs_batched, x_t_batched, jnp.array([t])
                         )
                         # `suffix_attn_mask` is shape (b, suffix_len, suffix_len) indicating how the suffix tokens can attend to each
                         # other
                         suffix_attn_mask = make_attn_mask(suffix_mask, suffix_ar_mask)
                         # `prefix_attn_mask` is shape (b, suffix_len, prefix_len) indicating how the suffix tokens can attend to the
                         # prefix tokens
-                        prefix_attn_mask = einops.repeat(prefix_mask, "b p -> b s p", s=suffix_tokens.shape[1])
+                        prefix_mask_i_batched = prefix_mask_i[None, ...]
+                        prefix_attn_mask = einops.repeat(prefix_mask_i_batched, "b p -> b s p", s=suffix_tokens.shape[1])
                         # `combined_mask` is shape (b, suffix_len, prefix_len + suffix_len) indicating how the suffix tokens (which
                         # generate the queries) can attend to the full prefix + suffix sequence (which generates the keys and values)
                         full_attn_mask = jnp.concatenate([prefix_attn_mask, suffix_attn_mask], axis=-1)
+                        prefix_tokens_i_batched = prefix_tokens_i[None, ...]
                         assert full_attn_mask.shape == (
-                            batch_size,
+                            1,
                             suffix_tokens.shape[1],
-                            prefix_tokens.shape[1] + suffix_tokens.shape[1],
+                            prefix_tokens_i_batched.shape[1] + suffix_tokens.shape[1],
                         )
                         # `positions` is shape (b, suffix_len) indicating the positions of the suffix tokens
-                        positions = jnp.sum(prefix_mask, axis=-1)[:, None] + jnp.cumsum(suffix_mask, axis=-1) - 1
+                        positions = jnp.sum(prefix_mask_i_batched, axis=-1)[:, None] + jnp.cumsum(suffix_mask, axis=-1) - 1
+
+                        # Add batch dimension to kv_cache_i (which is unbatched from vmap)
+                        kv_cache_i_batched = jax.tree.map(lambda x: x[None, ...] if x is not None else None, kv_cache_i)
 
                         (prefix_out, suffix_out), _ = self.PaliGemma.llm(
                             [None, suffix_tokens],
                             mask=full_attn_mask,
                             positions=positions,
-                            kv_cache=kv_cache,
+                            kv_cache=kv_cache_i_batched,
                             adarms_cond=[None, adarms_cond],
                         )
                         assert prefix_out is None
                         v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
-                        return x_t + v_t * (1 - t), v_t
+                        # Remove batch dimension from outputs
+                        return (x_t_batched + v_t * (1 - t))[0], v_t[0]
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
                     weights = self.rtc_processor.get_prefix_weights(
@@ -320,8 +331,9 @@ class Pi0(_model.BaseModel):
                     guidance_weight = jnp.minimum(c * inv_r2, self.config.rtc_config.max_guidance_weight)
                 
                     v_t = v_t + guidance_weight * pinv_correction
-                
-                v_t = pinv_corrected_velocity(observation, x_t, prev_chunk_left_over, time)
+                    return v_t
+
+                v_t = pinv_corrected_velocity(observation, x_t, prev_chunk_left_over, time, prefix_tokens, prefix_mask, kv_cache)
             else:
                 suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
                     observation, x_t, jnp.broadcast_to(time, batch_size)
