@@ -222,14 +222,14 @@ class RTCDatasetEvaluator:
 
         # Remove batch dimension for plotting
         prev_chunk_to_plot = prev_chunk_left_over[0] if prev_chunk_left_over.ndim == 3 else prev_chunk_left_over
-        actions_no_rtc_plot = actions_no_rtc[0] if actions_no_rtc.ndim == 3 else actions_no_rtc
+        # actions_no_rtc_plot = actions_no_rtc[0] if actions_no_rtc.ndim == 3 else actions_no_rtc
         actions_rtc_plot = actions_rtc[0] if actions_rtc.ndim == 3 else actions_rtc
 
-        # Plot NO RTC (left column)
-        self.axs = axes[:, 0]
-        axes[0, 0].set_title("Without RTC", fontsize=16, fontweight='bold')
-        self.plot_waypoints(prev_chunk_to_plot, label="Previous Actions", color="green")
-        self.plot_waypoints(actions_no_rtc_plot, label="Predicted Actions", color="blue")
+        # # Plot NO RTC (left column)
+        # self.axs = axes[:, 0]
+        # axes[0, 0].set_title("Without RTC", fontsize=16, fontweight='bold')
+        # self.plot_waypoints(prev_chunk_to_plot, label="Previous Actions", color="green")
+        # self.plot_waypoints(actions_no_rtc_plot, label="Predicted Actions", color="blue")
 
         # Plot WITH RTC (right column)
         self.axs = axes[:, 1]

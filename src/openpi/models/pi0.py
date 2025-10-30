@@ -272,6 +272,19 @@ class Pi0(_model.BaseModel):
         logger.info(f"action_horizon: {self.action_horizon}")
         logger.info(f"action_dim: {self.action_dim}")
 
+        # Debug: Check RTC status before entering scan
+        rtc_is_enabled = self.rtc_processor is not None and self.rtc_processor.rtc_enabled()
+        logger.info(f"RTC check before scan: rtc_processor={self.rtc_processor is not None}, enabled={rtc_is_enabled}")
+
+        # For JAX compilation, we need to determine RTC path outside the compiled function
+        use_rtc = rtc_is_enabled
+        execution_horizon_value = kwargs.get(
+            "execution_horizon",
+            self.rtc_processor.rtc_config.execution_horizon if self.rtc_processor is not None else 10
+        )
+        rtc_schedule = self.rtc_processor.rtc_config.prefix_attention_schedule if self.rtc_processor is not None else None
+        rtc_max_guidance = self.rtc_processor.rtc_config.max_guidance_weight if self.rtc_processor is not None else 5.0
+
         # Create timesteps array for scan
         timesteps = jnp.linspace(1.0, 0.0, num_steps + 1)
 
@@ -279,13 +292,10 @@ class Pi0(_model.BaseModel):
             x_t = carry
             time = t_input
 
-            # Use rtc_config.execution_horizon as default only if rtc_processor is not None
-            execution_horizon = kwargs.get(
-                "execution_horizon",
-                self.rtc_processor.rtc_config.execution_horizon if self.rtc_processor is not None else 10
-            )
+            # Use the pre-computed values
+            execution_horizon = execution_horizon_value
 
-            if self.rtc_processor is not None and self.rtc_processor.rtc_enabled():
+            if use_rtc:
                 # Note: logger.info won't work inside JIT-compiled function
                 # We'll capture this info in the tracking output instead
 
