@@ -67,10 +67,9 @@ def posemb_sincos(
 
 
 class Pi0(_model.BaseModel):
-    def __init__(self, config: pi0_config.Pi0Config, rngs: nnx.Rngs):
+    def __init__(self, config: pi0_config.Pi0Config, rngs: nnx.Rngs, rtc_config: rtc_processor.RTCConfig = None):
         super().__init__(config.action_dim, config.action_horizon, config.max_token_len)
         self.pi05 = config.pi05
-        self.config = config
         paligemma_config = _gemma.get_config(config.paligemma_variant)
         action_expert_config = _gemma.get_config(config.action_expert_variant)
         # TODO: rewrite gemma in NNX. For now, use bridge.
@@ -106,13 +105,11 @@ class Pi0(_model.BaseModel):
         # This attribute gets automatically set by model.train() and model.eval().
         self.deterministic = True
 
-        self.init_rtc_processor()
+        self.init_rtc_processor(rtc_config)
 
-    def init_rtc_processor(self):
-        self.rtc_processor = None
-
-        if True:
-            self.rtc_processor = rtc_processor.RTCProcessor(self.config.rtc_config)
+    def init_rtc_processor(self, rtc_config: rtc_processor.RTCConfig = None):
+        if rtc_config is not None:
+            self.rtc_processor = rtc_processor.RTCProcessor(rtc_config)
             
     @at.typecheck
     def embed_prefix(
@@ -262,7 +259,7 @@ class Pi0(_model.BaseModel):
         prev_chunk_left_over = jnp.pad(prev_chunk_left_over, ((0, 0), (0, time_pad), (0, action_dim_pad)))
 
         # Debug prints before entering JAX-compiled loop
-        logger.info(f"RTC Config enabled: {self.config.rtc_config is not None and self.config.rtc_config.enabled}")
+        logger.info(f"RTC Config enabled: {self.rtc_processor is not None}")
         logger.info(f"inference_delay: {inference_delay}")
         logger.info(f"prev_chunk_left_over: {prev_chunk_left_over} {prev_chunk_left_over.shape}")
 
@@ -275,11 +272,11 @@ class Pi0(_model.BaseModel):
                 self.config.rtc_config.execution_horizon if self.config.rtc_config is not None else 10
             )
 
-            if True:
+            if self.rtc_processor is not None and self.rtc_processor.rtc_enabled():
                 jax.debug.print("=== USING RTC PATH ===")
                 jax.debug.print("inference_delay: {}", inference_delay)
                 jax.debug.print("prev_chunk_left_over shape: {}", prev_chunk_left_over.shape if prev_chunk_left_over is not None else None)
-                jax.debug.print("execution_horizon: {}", execution_horizon)
+                jax.debug.print("execution_horizon: {}", self.rtc_processor.rtc_config.execution_horizon)
                 jax.debug.print("time: {}", time)
 
                 # KV cache structure: each element is [num_layers, batch, seq_len, ...]
@@ -337,14 +334,14 @@ class Pi0(_model.BaseModel):
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
                     weights = self.rtc_processor.get_prefix_weights(
-                        inference_delay, execution_horizon, self.action_horizon, rtc_processor.RTCAttentionSchedule.EXP
+                        inference_delay, execution_horizon, self.action_horizon, self.rtc_processor.rtc_config.prefix_attention_schedule
                     )
                     error = (y - x_1) * weights[:, None]
                     pinv_correction = vjp_fun(error)[0]
                     # constants from paper
                     inv_r2 = (t**2 + (1 - t) ** 2) / ((1 - t) ** 2)
-                    c = jnp.nan_to_num((1 - t) / t, posinf=5.0)
-                    guidance_weight = jnp.minimum(c * inv_r2, 5.0)
+                    c = jnp.nan_to_num((1 - t) / t, posinf=self.rtc_processor.rtc_config.max_guidance_weight)
+                    guidance_weight = jnp.minimum(c * inv_r2, self.rtc_processor.rtc_config.max_guidance_weight)
                 
                     v_t = v_t + guidance_weight * pinv_correction
                     return v_t
