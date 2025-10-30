@@ -108,12 +108,12 @@ class Pi0(_model.BaseModel):
         self.init_rtc_processor(rtc_config)
 
     def init_rtc_processor(self, rtc_config: rtc_processor.RTCConfig = None):
-        # rtc_config = rtc_processor.RTCConfig(
-        #     enabled=True,
-        #     prefix_attention_schedule="EXP",
-        #     max_guidance_weight=5.0,
-        #     execution_horizon=10,
-        # )
+        rtc_config = rtc_processor.RTCConfig(
+            enabled=True,
+            prefix_attention_schedule="EXP",
+            max_guidance_weight=5.0,
+            execution_horizon=10,
+        )
 
         if rtc_config is None:
             self.rtc_processor = None
