@@ -3,7 +3,7 @@
 import logging
 import pathlib
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any
 
 import jax
@@ -48,7 +48,8 @@ class RTCDatasetEvaluator:
             sample_kwargs=cfg.sample_kwargs or {},
         )
 
-        self.policy._model.config.rtc_config = cfg.rtc_config
+        # Replace the frozen config with a new one that includes RTC settings
+        self.policy._model.config = replace(self.policy._model.config, rtc_config=cfg.rtc_config)
         self.policy._model.init_rtc_processor(verbose=True)
 
         logging.info(f"RTC config: {self.policy._model.config.rtc_config}")
