@@ -268,10 +268,10 @@ class Pi0(_model.BaseModel):
         def step(carry):
             x_t, time = carry
 
-            # Use rtc_config.execution_horizon as default only if rtc_config is not None
+            # Use rtc_config.execution_horizon as default only if rtc_processor is not None
             execution_horizon = kwargs.get(
                 "execution_horizon",
-                self.config.rtc_config.execution_horizon if self.config.rtc_config is not None else 10
+                self.rtc_processor.rtc_config.execution_horizon if self.rtc_processor is not None else 10
             )
 
             if self.rtc_processor is not None and self.rtc_processor.rtc_enabled():
