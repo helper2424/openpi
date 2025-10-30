@@ -281,98 +281,103 @@ class RTCDatasetEvaluator:
         ax1.grid(True)
 
         # 2. V_t (velocity) evolution
-            ax2 = plt.subplot(3, 3, 2)
+        ax2 = plt.subplot(3, 3, 2)
+        for i in range(num_dims):
+            ax2.plot(time_rtc, v_t_rtc[:, 0, 0, i], label=f"Dim {i}")
+        ax2.set_xlabel("Time (t)")
+        ax2.set_ylabel("V_t value")
+        ax2.set_title("V_t (Velocity) Evolution")
+        ax2.legend()
+        ax2.grid(True)
+
+        # 3. Guidance weights over time (if RTC)
+        if "guidance_weight" in tracking_rtc:
+            ax3 = plt.subplot(3, 3, 3)
+            guidance_weights = np.array(tracking_rtc["guidance_weight"])
+            if guidance_weights.ndim > 1:
+                guidance_weights = guidance_weights[:, 0]  # Take first batch
+            ax3.plot(time_rtc, guidance_weights)
+            ax3.set_xlabel("Time (t)")
+            ax3.set_ylabel("Guidance Weight")
+            ax3.set_title("Guidance Weight Evolution")
+            ax3.grid(True)
+
+        # 4. Error magnitudes (if RTC)
+        if "error" in tracking_rtc:
+            ax4 = plt.subplot(3, 3, 4)
+            errors = np.array(tracking_rtc["error"])
+            error_norms = np.linalg.norm(errors.reshape(errors.shape[0], -1), axis=-1)
+            ax4.plot(time_rtc, error_norms)
+            ax4.set_xlabel("Time (t)")
+            ax4.set_ylabel("Error Norm")
+            ax4.set_title("Error Magnitude Over Time")
+            ax4.grid(True)
+
+        # 5. Prefix weights visualization (if RTC)
+        if "weights" in tracking_rtc:
+            ax5 = plt.subplot(3, 3, 5)
+            weights = np.array(tracking_rtc["weights"])
+            if weights.ndim > 1:
+                weights = weights[0, 0] if weights.ndim > 2 else weights[0]
+            ax5.plot(weights)
+            ax5.set_xlabel("Action Dimension")
+            ax5.set_ylabel("Weight")
+            ax5.set_title("Prefix Attention Weights")
+            ax5.grid(True)
+
+        # 6. Pinv correction magnitudes (if RTC)
+        if "pinv_correction" in tracking_rtc:
+            ax6 = plt.subplot(3, 3, 6)
+            pinv_corrections = np.array(tracking_rtc["pinv_correction"])
+            pinv_norms = np.linalg.norm(pinv_corrections.reshape(pinv_corrections.shape[0], -1), axis=-1)
+            ax6.plot(time_rtc, pinv_norms)
+            ax6.set_xlabel("Time (t)")
+            ax6.set_ylabel("Correction Norm")
+            ax6.set_title("Pinv Correction Magnitude")
+            ax6.grid(True)
+
+        # 7. X_1 predictions (if RTC)
+        if "x_1" in tracking_rtc:
+            ax7 = plt.subplot(3, 3, 7)
+            x_1_history = np.array(tracking_rtc["x_1"])
             for i in range(num_dims):
-                ax2.plot(time_history, v_t_history[:, 0, 0, i], label=f"Dim {i}")
-            ax2.set_xlabel("Time (t)")
-            ax2.set_ylabel("V_t value")
-            ax2.set_title("V_t (Velocity) Evolution")
-            ax2.legend()
-            ax2.grid(True)
+                ax7.plot(time_rtc, x_1_history[:, 0, 0, i], label=f"Dim {i}")
+            ax7.set_xlabel("Time (t)")
+            ax7.set_ylabel("X_1 value")
+            ax7.set_title("X_1 Predictions (first 3 dims)")
+            ax7.legend()
+            ax7.grid(True)
 
-            # 3. Guidance weights over time
-            if "guidance_weight_history" in tracking and len(tracking["guidance_weight_history"]) > 0:
-                ax3 = plt.subplot(3, 3, 3)
-                guidance_weights = np.array(tracking["guidance_weight_history"])
-                ax3.plot(time_history[:len(guidance_weights)], guidance_weights[:, 0])
-                ax3.set_xlabel("Time (t)")
-                ax3.set_ylabel("Guidance Weight")
-                ax3.set_title("Guidance Weight Evolution")
-                ax3.grid(True)
+        # 8. Convergence plot - difference between consecutive x_t
+        if x_t_rtc.shape[0] > 1:
+            ax8 = plt.subplot(3, 3, 8)
+            x_t_diffs = np.linalg.norm(np.diff(x_t_rtc, axis=0).reshape(x_t_rtc.shape[0]-1, -1), axis=-1)
+            ax8.plot(time_rtc[1:], x_t_diffs)
+            ax8.set_xlabel("Time (t)")
+            ax8.set_ylabel("||X_t - X_{t-1}||")
+            ax8.set_title("Convergence (Step Size)")
+            ax8.grid(True)
+            ax8.set_yscale("log")
 
-            # 4. Error magnitudes
-            if "error_history" in tracking and len(tracking["error_history"]) > 0:
-                ax4 = plt.subplot(3, 3, 4)
-                errors = np.array(tracking["error_history"])
-                error_norms = np.linalg.norm(errors, axis=-1)[:, 0]
-                ax4.plot(time_history[:len(error_norms)], error_norms)
-                ax4.set_xlabel("Time (t)")
-                ax4.set_ylabel("Error Norm")
-                ax4.set_title("Error Magnitude Over Time")
-                ax4.grid(True)
+        # 9. Compare RTC vs non-RTC if available
+        if tracking_no_rtc is not None and "v_t" in tracking_no_rtc:
+            ax9 = plt.subplot(3, 3, 9)
+            v_t_no_rtc = np.array(tracking_no_rtc["v_t"])
+            v_t_rtc_norm = np.linalg.norm(v_t_rtc.reshape(v_t_rtc.shape[0], -1), axis=-1)
+            v_t_no_rtc_norm = np.linalg.norm(v_t_no_rtc.reshape(v_t_no_rtc.shape[0], -1), axis=-1)
+            ax9.plot(time_rtc, v_t_rtc_norm, label="RTC", color="red")
+            ax9.plot(time_rtc, v_t_no_rtc_norm, label="No RTC", color="blue", linestyle="--")
+            ax9.set_xlabel("Time (t)")
+            ax9.set_ylabel("||V_t||")
+            ax9.set_title("Velocity Magnitude Comparison")
+            ax9.legend()
+            ax9.grid(True)
 
-            # 5. Prefix weights visualization
-            if "weights_history" in tracking and len(tracking["weights_history"]) > 0:
-                ax5 = plt.subplot(3, 3, 5)
-                weights = np.array(tracking["weights_history"])[0, 0]  # Take first timestep
-                ax5.plot(weights)
-                ax5.set_xlabel("Action Dimension")
-                ax5.set_ylabel("Weight")
-                ax5.set_title("Prefix Attention Weights")
-                ax5.grid(True)
-
-            # 6. Pinv correction magnitudes
-            if "pinv_correction_history" in tracking and len(tracking["pinv_correction_history"]) > 0:
-                ax6 = plt.subplot(3, 3, 6)
-                pinv_corrections = np.array(tracking["pinv_correction_history"])
-                pinv_norms = np.linalg.norm(pinv_corrections, axis=-1)[:, 0]
-                ax6.plot(time_history[:len(pinv_norms)], pinv_norms)
-                ax6.set_xlabel("Time (t)")
-                ax6.set_ylabel("Correction Norm")
-                ax6.set_title("Pinv Correction Magnitude")
-                ax6.grid(True)
-
-            # 7. X_1 predictions
-            if "x_1_history" in tracking and len(tracking["x_1_history"]) > 0:
-                ax7 = plt.subplot(3, 3, 7)
-                x_1_history = np.array(tracking["x_1_history"])
-                for i in range(num_dims):
-                    ax7.plot(time_history[:len(x_1_history)], x_1_history[:, 0, 0, i], label=f"Dim {i}")
-                ax7.set_xlabel("Time (t)")
-                ax7.set_ylabel("X_1 value")
-                ax7.set_title("X_1 Predictions (first 3 dims)")
-                ax7.legend()
-                ax7.grid(True)
-
-            # 8. Convergence plot - difference between consecutive x_t
-            if x_t_history.shape[0] > 1:
-                ax8 = plt.subplot(3, 3, 8)
-                x_t_diffs = np.linalg.norm(np.diff(x_t_history, axis=0), axis=-1)[:, 0, 0]
-                ax8.plot(time_history[1:], x_t_diffs)
-                ax8.set_xlabel("Time (t)")
-                ax8.set_ylabel("||X_t - X_{t-1}||")
-                ax8.set_title("Convergence (Step Size)")
-                ax8.grid(True)
-                ax8.set_yscale("log")
-
-            # 9. Cumulative correction
-            if "v_t_history" in tracking and "pinv_correction_history" in tracking:
-                ax9 = plt.subplot(3, 3, 9)
-                v_t_uncorrected = np.array(tracking.get("v_t_uncorrected_history", v_t_history))
-                cumulative_correction = np.cumsum(np.linalg.norm(v_t_history - v_t_uncorrected, axis=-1)[:, 0, 0])
-                ax9.plot(time_history[:len(cumulative_correction)], cumulative_correction)
-                ax9.set_xlabel("Time (t)")
-                ax9.set_ylabel("Cumulative Correction")
-                ax9.set_title("Cumulative RTC Correction")
-                ax9.grid(True)
-
-            plt.tight_layout()
-            tracking_filename = f"rtc_tracking_details_{selected_indices[0]}_{selected_indices[1]}.png"
-            plt.savefig(tracking_filename, dpi=150)
-            logging.info(f"Saved RTC tracking details to {tracking_filename}")
-            plt.close(fig)
-        else:
-            logging.warning("No tracking data available for visualization")
+        plt.tight_layout()
+        tracking_filename = f"rtc_tracking_details_{selected_indices[0]}_{selected_indices[1]}.png"
+        plt.savefig(tracking_filename, dpi=150)
+        logging.info(f"Saved RTC tracking details to {tracking_filename}")
+        plt.close(fig)
 
 @dataclass
 class Args:
