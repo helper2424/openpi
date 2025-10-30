@@ -253,6 +253,11 @@ class Pi0(_model.BaseModel):
         inference_delay = kwargs.get("inference_delay")
         prev_chunk_left_over = kwargs.get("prev_chunk_left_over")
 
+        # Debug prints before entering JAX-compiled loop
+        logger.info(f"RTC Config enabled: {self.config.rtc_config is not None and self.config.rtc_config.enabled}")
+        logger.info(f"inference_delay: {inference_delay}")
+        logger.info(f"prev_chunk_left_over: {prev_chunk_left_over}")
+
         def step(carry):
             x_t, time = carry
 
@@ -263,11 +268,11 @@ class Pi0(_model.BaseModel):
             )
 
             if self.config.rtc_config is not None and self.config.rtc_config.enabled:
-
-                print(f"inference_delay: {inference_delay}")
-                print(f"prev_chunk_left_over: {prev_chunk_left_over}")
-
-                print("USE RTC way")
+                jax.debug.print("=== USING RTC PATH ===")
+                jax.debug.print("inference_delay: {}", inference_delay)
+                jax.debug.print("prev_chunk_left_over shape: {}", prev_chunk_left_over.shape if prev_chunk_left_over is not None else None)
+                jax.debug.print("execution_horizon: {}", execution_horizon)
+                jax.debug.print("time: {}", time)
 
                 @functools.partial(jax.vmap, in_axes=(0, 0, 0, None))  # over batch
                 def pinv_corrected_velocity(obs, x_t, y, t):
