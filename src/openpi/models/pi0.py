@@ -108,12 +108,12 @@ class Pi0(_model.BaseModel):
         self.init_rtc_processor(rtc_config)
 
     def init_rtc_processor(self, rtc_config: rtc_processor.RTCConfig = None):
-        rtc_config = rtc_processor.RTCConfig(
-            enabled=True,
-            prefix_attention_schedule="EXP",
-            max_guidance_weight=5.0,
-            execution_horizon=10,
-        )
+        # rtc_config = rtc_processor.RTCConfig(
+        #     enabled=True,
+        #     prefix_attention_schedule="EXP",
+        #     max_guidance_weight=5.0,
+        #     execution_horizon=10,
+        # )
 
         if rtc_config is None:
             self.rtc_processor = None
@@ -295,6 +295,39 @@ class Pi0(_model.BaseModel):
         # Create timesteps array for scan
         timesteps = jnp.linspace(1.0, 0.0, num_steps + 1)
 
+        def original_step_scan(carry, t_input):
+            x_t = carry
+            time = t_input
+            suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
+                observation, x_t, jnp.broadcast_to(time, batch_size)
+            )
+            # `suffix_attn_mask` is shape (b, suffix_len, suffix_len) indicating how the suffix tokens can attend to each
+            # other
+            suffix_attn_mask = make_attn_mask(suffix_mask, suffix_ar_mask)
+            # `prefix_attn_mask` is shape (b, suffix_len, prefix_len) indicating how the suffix tokens can attend to the
+            # prefix tokens
+            prefix_attn_mask = einops.repeat(prefix_mask, "b p -> b s p", s=suffix_tokens.shape[1])
+            # `combined_mask` is shape (b, suffix_len, prefix_len + suffix_len) indicating how the suffix tokens (which
+            # generate the queries) can attend to the full prefix + suffix sequence (which generates the keys and values)
+            full_attn_mask = jnp.concatenate([prefix_attn_mask, suffix_attn_mask], axis=-1)
+            assert full_attn_mask.shape == (
+                batch_size,
+                suffix_tokens.shape[1],
+                prefix_tokens.shape[1] + suffix_tokens.shape[1],
+            )
+            # `positions` is shape (b, suffix_len) indicating the positions of the suffix tokens
+            positions = jnp.sum(prefix_mask, axis=-1)[:, None] + jnp.cumsum(suffix_mask, axis=-1) - 1
+
+            (prefix_out, suffix_out), _ = self.PaliGemma.llm(
+                [None, suffix_tokens],
+                mask=full_attn_mask,
+                positions=positions,
+                kv_cache=kv_cache,
+                adarms_cond=[None, adarms_cond],
+            )
+            assert prefix_out is None
+            return self.action_out_proj(suffix_out[:, -self.action_horizon :])
+
         def step_scan(carry, t_input):
             x_t = carry
             time = t_input
@@ -313,51 +346,10 @@ class Pi0(_model.BaseModel):
                 @functools.partial(jax.vmap, in_axes=(0, 0, 0, None, 0, 0, kv_cache_in_axes))  # over batch
                 def pinv_corrected_velocity(obs, x_t, y, t, prefix_tokens_i, prefix_mask_i, kv_cache_i):
                     def denoiser(x_t):
-                        # Add batch dimension since embed_suffix expects batched inputs
-                        x_t_batched = x_t[None, ...]  # (action_horizon, action_dim) -> (1, action_horizon, action_dim)
-                        # Add batch dimension to obs by tree mapping
-                        obs_batched = jax.tree.map(lambda x: x[None, ...], obs)
+                        v_t = original_step_scan(x_t, time)
 
-                        suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
-                            obs_batched, x_t_batched, jnp.array([t])
-                        )
-                        # `suffix_attn_mask` is shape (b, suffix_len, suffix_len) indicating how the suffix tokens can attend to each
-                        # other
-                        suffix_attn_mask = make_attn_mask(suffix_mask, suffix_ar_mask)
-                        # `prefix_attn_mask` is shape (b, suffix_len, prefix_len) indicating how the suffix tokens can attend to the
-                        # prefix tokens
-                        prefix_mask_i_batched = prefix_mask_i[None, ...]
-                        prefix_attn_mask = einops.repeat(prefix_mask_i_batched, "b p -> b s p", s=suffix_tokens.shape[1])
-                        # `combined_mask` is shape (b, suffix_len, prefix_len + suffix_len) indicating how the suffix tokens (which
-                        # generate the queries) can attend to the full prefix + suffix sequence (which generates the keys and values)
-                        full_attn_mask = jnp.concatenate([prefix_attn_mask, suffix_attn_mask], axis=-1)
-                        prefix_tokens_i_batched = prefix_tokens_i[None, ...]
-                        assert full_attn_mask.shape == (
-                            1,
-                            suffix_tokens.shape[1],
-                            prefix_tokens_i_batched.shape[1] + suffix_tokens.shape[1],
-                        )
-                        # `positions` is shape (b, suffix_len) indicating the positions of the suffix tokens
-                        positions = jnp.sum(prefix_mask_i_batched, axis=-1)[:, None] + jnp.cumsum(suffix_mask, axis=-1) - 1
-
-                        # kv_cache_i already has the right structure [num_layers, 1, seq_len, ...]
-                        # after vmap over axis 1, so we need to add back the batch dimension at axis 1
-                        kv_cache_i_batched = jax.tree.map(
-                            lambda x: jnp.expand_dims(x, axis=1) if x is not None else None,
-                            kv_cache_i
-                        )
-
-                        (prefix_out, suffix_out), _ = self.PaliGemma.llm(
-                            [None, suffix_tokens],
-                            mask=full_attn_mask,
-                            positions=positions,
-                            kv_cache=kv_cache_i_batched,
-                            adarms_cond=[None, adarms_cond],
-                        )
-                        assert prefix_out is None
-                        v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
                         # Remove batch dimension from outputs
-                        return (x_t_batched - v_t * (1 - t))[0], v_t[0]
+                        return (x_t - v_t * (1 - t))[0], v_t[0]
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
 
@@ -373,7 +365,6 @@ class Pi0(_model.BaseModel):
                     inv_r2 = (t**2 + (1 - t) ** 2) / ((1 - t) ** 2)
                     c = jnp.nan_to_num((1 - t) / t, posinf=self.rtc_processor.rtc_config.max_guidance_weight)
                     guidance_weight = jnp.minimum(c * inv_r2, self.rtc_processor.rtc_config.max_guidance_weight)
-
 
                     v_t_corrected = v_t - guidance_weight * pinv_correction
 
@@ -404,35 +395,7 @@ class Pi0(_model.BaseModel):
                 logger.info("=== USING NON-RTC PATH ===")
                 logger.info(f"rtc_processor: {self.rtc_processor}")
 
-                suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
-                    observation, x_t, jnp.broadcast_to(time, batch_size)
-                )
-                # `suffix_attn_mask` is shape (b, suffix_len, suffix_len) indicating how the suffix tokens can attend to each
-                # other
-                suffix_attn_mask = make_attn_mask(suffix_mask, suffix_ar_mask)
-                # `prefix_attn_mask` is shape (b, suffix_len, prefix_len) indicating how the suffix tokens can attend to the
-                # prefix tokens
-                prefix_attn_mask = einops.repeat(prefix_mask, "b p -> b s p", s=suffix_tokens.shape[1])
-                # `combined_mask` is shape (b, suffix_len, prefix_len + suffix_len) indicating how the suffix tokens (which
-                # generate the queries) can attend to the full prefix + suffix sequence (which generates the keys and values)
-                full_attn_mask = jnp.concatenate([prefix_attn_mask, suffix_attn_mask], axis=-1)
-                assert full_attn_mask.shape == (
-                    batch_size,
-                    suffix_tokens.shape[1],
-                    prefix_tokens.shape[1] + suffix_tokens.shape[1],
-                )
-                # `positions` is shape (b, suffix_len) indicating the positions of the suffix tokens
-                positions = jnp.sum(prefix_mask, axis=-1)[:, None] + jnp.cumsum(suffix_mask, axis=-1) - 1
-
-                (prefix_out, suffix_out), _ = self.PaliGemma.llm(
-                    [None, suffix_tokens],
-                    mask=full_attn_mask,
-                    positions=positions,
-                    kv_cache=kv_cache,
-                    adarms_cond=[None, adarms_cond],
-                )
-                assert prefix_out is None
-                v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
+                v_t = original_step_scan(x_t, time)
 
                 # Build minimal tracking output for non-RTC case
                 # Still need to return a dict with same structure to avoid JAX tracer issues
