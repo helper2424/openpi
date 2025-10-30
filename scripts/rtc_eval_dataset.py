@@ -244,6 +244,11 @@ def main(args: Args):
     # Set random seed for reproducibility
     rng_key = set_seed(args.seed)
 
+    # Ensure RTC is enabled when config is provided
+    # tyro may not preserve the default enabled=True when parsing nested dataclasses
+    if args.rtc_config is not None:
+        args.rtc_config = replace(args.rtc_config, enabled=True)
+
     logging.info("=" * 80)
     logging.info("Pi0 Dataset Evaluation with JAX")
     logging.info("=" * 80)
