@@ -272,18 +272,6 @@ class Pi0(_model.BaseModel):
         logger.info(f"action_horizon: {self.action_horizon}")
         logger.info(f"action_dim: {self.action_dim}")
 
-        # Test weights calculation outside of JAX compilation
-        if self.rtc_processor is not None and self.rtc_processor.rtc_enabled():
-            test_weights = self.rtc_processor.get_prefix_weights(
-                inference_delay,
-                kwargs.get("execution_horizon", self.rtc_processor.rtc_config.execution_horizon),
-                self.action_horizon,
-                self.rtc_processor.rtc_config.prefix_attention_schedule
-            )
-            logger.info(f"TEST WEIGHTS CALCULATION: shape={test_weights.shape}, values={test_weights}")
-            logger.info(f"TEST WEIGHTS: sum={float(jnp.sum(test_weights))}, max={float(jnp.max(test_weights))}, min={float(jnp.min(test_weights))}")
-            logger.info(f"TEST WEIGHTS: non-zero count={int(jnp.sum(test_weights > 0))}")
-
         # Create timesteps array for scan
         timesteps = jnp.linspace(1.0, 0.0, num_steps + 1)
 
@@ -356,9 +344,11 @@ class Pi0(_model.BaseModel):
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
 
+                    logging.info(f"Before get_prefix_weights: inference_delay: {inference_delay}, execution_horizon: {execution_horizon}, action_horizon: {self.action_horizon}, prefix_attention_schedule: {self.rtc_processor.rtc_config.prefix_attention_schedule}")
                     weights = self.rtc_processor.get_prefix_weights(
                         inference_delay, execution_horizon, self.action_horizon, self.rtc_processor.rtc_config.prefix_attention_schedule
                     )
+                    logging.info(f"After get_prefix_weights: weights: {weights}")
 
                     error = (y - x_1) * weights[:, None]
                     pinv_correction = vjp_fun(error)[0]
