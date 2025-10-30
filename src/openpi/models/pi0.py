@@ -329,14 +329,14 @@ class Pi0(_model.BaseModel):
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
                     weights = self.rtc_processor.get_prefix_weights(
-                        inference_delay, execution_horizon, self.action_horizon, self.config.rtc_config.prefix_attention_schedule
+                        inference_delay, execution_horizon, self.action_horizon, rtc_processor.RTCAttentionSchedule.EXP
                     )
                     error = (y - x_1) * weights[:, None]
                     pinv_correction = vjp_fun(error)[0]
                     # constants from paper
                     inv_r2 = (t**2 + (1 - t) ** 2) / ((1 - t) ** 2)
-                    c = jnp.nan_to_num((1 - t) / t, posinf=self.config.rtc_config.max_guidance_weight)
-                    guidance_weight = jnp.minimum(c * inv_r2, self.config.rtc_config.max_guidance_weight)
+                    c = jnp.nan_to_num((1 - t) / t, posinf=5.0)
+                    guidance_weight = jnp.minimum(c * inv_r2, 5.0)
                 
                     v_t = v_t + guidance_weight * pinv_correction
                     return v_t
