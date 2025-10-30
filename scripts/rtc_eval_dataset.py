@@ -187,9 +187,12 @@ class RTCDatasetEvaluator:
             execution_horizon=self.cfg.execution_horizon
         )
 
-        logging.info(f"result_rtc: {result_rtc}")
-        logging.info(f"result_rtc['actions']: {result_rtc['actions']}")
-        logging.info(f"result_rtc['tracking_history']: {result_rtc['tracking_history']}")
+        logging.info(f"result_rtc keys: {list(result_rtc.keys())}")
+        logging.info(f"result_rtc['actions'] shape: {result_rtc['actions'].shape}")
+        if 'tracking_history' in result_rtc:
+            logging.info(f"result_rtc['tracking_history']: {result_rtc['tracking_history']}")
+        else:
+            logging.info("No 'tracking_history' key in result_rtc")
         actions_rtc = result_rtc["actions"]
         tracking_rtc = result_rtc.get("tracking_history", None)
 

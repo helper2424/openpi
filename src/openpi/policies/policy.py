@@ -127,11 +127,16 @@ class Policy(BasePolicy):
         else:
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
 
-        # Add tracking_history back if it was present
-        if tracking_history is not None:
-            outputs["tracking_history"] = tracking_history
-
         outputs = self._output_transform(outputs)
+
+        # Add tracking_history back AFTER output_transform (which might remove unknown keys)
+        if tracking_history is not None:
+            # Convert JAX arrays to numpy for tracking history
+            if not self._is_pytorch_model:
+                tracking_history = jax.tree.map(lambda x: np.asarray(x) if hasattr(x, 'shape') else x, tracking_history)
+            outputs["tracking_history"] = tracking_history
+            logging.info(f"Added tracking_history to outputs with keys: {list(tracking_history.keys()) if isinstance(tracking_history, dict) else 'not a dict'}")
+
         outputs["policy_timing"] = {
             "infer_ms": model_time * 1000,
         }
