@@ -141,27 +141,27 @@ class RTCDatasetEvaluator:
         noise = np.random.randn(model_action_horizon, model_action_dim).astype(np.float32)
 
         # ========== Run inference WITHOUT RTC ==========
-        logging.info("=" * 80)
-        logging.info("Running inference WITHOUT RTC")
-        logging.info("=" * 80)
+        # logging.info("=" * 80)
+        # logging.info("Running inference WITHOUT RTC")
+        # logging.info("=" * 80)
 
-        # Use the policy without RTC
-        rtc_processor_no_rtc = self.policy_without_rtc._model.rtc_processor
-        if rtc_processor_no_rtc:
-            logging.info(f"Policy WITHOUT RTC - rtc_enabled: {rtc_processor_no_rtc.rtc_enabled()}")
-            logging.info(f"Policy WITHOUT RTC - config: {rtc_processor_no_rtc.rtc_config}")
-        else:
-            logging.info("Policy WITHOUT RTC - rtc_processor is None")
+        # # Use the policy without RTC
+        # rtc_processor_no_rtc = self.policy_without_rtc._model.rtc_processor
+        # if rtc_processor_no_rtc:
+        #     logging.info(f"Policy WITHOUT RTC - rtc_enabled: {rtc_processor_no_rtc.rtc_enabled()}")
+        #     logging.info(f"Policy WITHOUT RTC - config: {rtc_processor_no_rtc.rtc_config}")
+        # else:
+        #     logging.info("Policy WITHOUT RTC - rtc_processor is None")
 
-        result_no_rtc = self.policy_without_rtc.infer(
-            obs,
-            noise=noise,
-            inference_delay=self.cfg.inference_delay,
-            prev_chunk_left_over=prev_chunk_left_over,
-            execution_horizon=self.cfg.execution_horizon
-        )
-        actions_no_rtc = result_no_rtc["actions"]
-        tracking_no_rtc = result_no_rtc.get("tracking_history", None)
+        # result_no_rtc = self.policy_without_rtc.infer(
+        #     obs,
+        #     noise=noise,
+        #     inference_delay=self.cfg.inference_delay,
+        #     prev_chunk_left_over=prev_chunk_left_over,
+        #     execution_horizon=self.cfg.execution_horizon
+        # )
+        # actions_no_rtc = result_no_rtc["actions"]
+        # tracking_no_rtc = result_no_rtc.get("tracking_history", None)
 
         # ========== Run inference WITH RTC ==========
         logging.info("=" * 80)
@@ -246,7 +246,7 @@ class RTCDatasetEvaluator:
         # ========== Create detailed RTC tracking visualization ==========
         if True:
             logging.info("Creating detailed RTC tracking visualization...")
-            self.visualize_rtc_tracking(tracking_rtc, tracking_no_rtc, selected_indices)
+            self.visualize_rtc_tracking(tracking_rtc, None, selected_indices)
         else:
             logging.info("No tracking data available for detailed visualization")
 
