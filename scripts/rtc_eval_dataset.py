@@ -224,7 +224,7 @@ class RTCDatasetEvaluator:
         plt.close(fig)
 
         # ========== Create detailed RTC tracking visualization ==========
-        if tracking_rtc is not None:
+        if True:
             logging.info("Creating detailed RTC tracking visualization...")
             self.visualize_rtc_tracking(tracking_rtc, tracking_no_rtc, selected_indices)
         else:
