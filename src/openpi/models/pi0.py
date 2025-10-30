@@ -432,6 +432,11 @@ class Pi0(_model.BaseModel):
         # Use scan instead of while_loop for tracking
         x_0, tracking_history = jax.lax.scan(step_scan, noise, timesteps[:-1])
 
+        # Debug logging for tracking using jax.debug.print
+        jax.debug.print("Pi0 sample_actions: x_0 shape: {}", x_0.shape)
+        jax.debug.print("Pi0 sample_actions: tracking_history type: {}", type(tracking_history))
+        # Note: Can't check keys dynamically in JIT, but we know the structure
+
         # Always return both to avoid JAX tracer issues
         # The caller can decide whether to use the tracking data
         return x_0, tracking_history

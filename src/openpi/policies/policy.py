@@ -93,6 +93,16 @@ class Policy(BasePolicy):
         # Call sample_actions - it may return a tuple (actions, tracking_data)
         sample_result = self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs, **kwargs)
 
+        # Debug logging
+        logging.info(f"sample_result type: {type(sample_result)}")
+        if isinstance(sample_result, tuple):
+            logging.info(f"sample_result is tuple with {len(sample_result)} elements")
+            if len(sample_result) == 2:
+                logging.info(f"sample_result[1] (tracking) type: {type(sample_result[1])}")
+                if sample_result[1] is not None:
+                    if isinstance(sample_result[1], dict):
+                        logging.info(f"Tracking keys: {list(sample_result[1].keys())}")
+
         # Handle both single return value and tuple
         if isinstance(sample_result, tuple) and len(sample_result) == 2:
             actions, tracking_history = sample_result

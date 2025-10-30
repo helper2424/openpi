@@ -19,7 +19,9 @@
       "Bash(cat:*)",
       "Bash(scp:*)",
       "Bash(python:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(source .venv/bin/activate)",
+      "Bash(uv run python:*)"
     ],
     "deny": [],
     "ask": []
