@@ -50,13 +50,7 @@ class RTCDatasetEvaluator:
 
         # Replace the frozen config with a new one that includes RTC settings
         # Since Pi0Config is frozen, we must use replace() to create a new instance
-        self.policy._model.config = replace(
-            self.policy._model.config,
-            rtc_config=cfg.rtc_config
-        )
-        self.policy._model.init_rtc_processor()
-
-        logging.info(f"RTC config: {self.policy._model.config.rtc_config}")
+        self.policy._model.init_rtc_processor(cfg.rtc_config)
 
         logging.info(f"Policy loaded successfully")
         logging.info(f"Model config: {self.train_cfg.model}")
@@ -134,37 +128,73 @@ class RTCDatasetEvaluator:
         model_action_dim = self.train_cfg.model.action_dim
         noise = np.random.randn(model_action_horizon, model_action_dim).astype(np.float32)
 
-        # Inference using the policy
-        # Note: The pi0 model's inference is handled through the Policy.infer method
-        # execution_horizon is required even if RTC is not enabled in the model
-        result = self.policy.infer(
+        # ========== Run inference WITHOUT RTC ==========
+        logging.info("=" * 80)
+        logging.info("Running inference WITHOUT RTC")
+        logging.info("=" * 80)
+
+        # Temporarily disable RTC
+        original_rtc_processor = self.policy._model.rtc_processor
+        self.policy._model.rtc_processor = None
+
+        result_no_rtc = self.policy.infer(
             obs,
             noise=noise,
-            inference_delay=4,
+            inference_delay=self.cfg.inference_delay,
             prev_chunk_left_over=prev_chunk_left_over,
             execution_horizon=self.cfg.execution_horizon
         )
-        actions = result["actions"]
+        actions_no_rtc = result_no_rtc["actions"]
 
-        # Create visualization
+        # Restore RTC processor
+        self.policy._model.rtc_processor = original_rtc_processor
+
+        # ========== Run inference WITH RTC ==========
+        logging.info("=" * 80)
+        logging.info("Running inference WITH RTC")
+        logging.info("=" * 80)
+
+        result_rtc = self.policy.infer(
+            obs,
+            noise=noise,
+            inference_delay=self.cfg.inference_delay,
+            prev_chunk_left_over=prev_chunk_left_over,
+            execution_horizon=self.cfg.execution_horizon
+        )
+        actions_rtc = result_rtc["actions"]
+
+        # ========== Create side-by-side visualization ==========
         # Use min of 6 and model's action_dim for plots
         num_plots = min(6, model_action_dim)
-        fig, axs = plt.subplots(num_plots, 1, figsize=(12, 12))
-        if num_plots == 1:
-            axs = [axs]
-        fig.suptitle(f"Episodes {selected_indices[0]} & {selected_indices[1]} - Action Prediction", fontsize=16)
+        fig, axes = plt.subplots(num_plots, 2, figsize=(20, 12))
 
-        # Plot actions
-        self.axs = axs
+        # Handle single row case
+        if num_plots == 1:
+            axes = axes.reshape(1, 2)
+
+        fig.suptitle(f"Episodes {selected_indices[0]} & {selected_indices[1]} - RTC Comparison", fontsize=18)
+
         # Remove batch dimension for plotting
         prev_chunk_to_plot = prev_chunk_left_over[0] if prev_chunk_left_over.ndim == 3 else prev_chunk_left_over
-        actions_to_plot = actions[0] if actions.ndim == 3 else actions
-        self.plot_waypoints(prev_chunk_to_plot, label="Previous Actions (Episode 1)", color="green")
-        self.plot_waypoints(actions_to_plot, label="Predicted Actions (Episode 2)", color="blue")
+        actions_no_rtc_plot = actions_no_rtc[0] if actions_no_rtc.ndim == 3 else actions_no_rtc
+        actions_rtc_plot = actions_rtc[0] if actions_rtc.ndim == 3 else actions_rtc
+
+        # Plot NO RTC (left column)
+        self.axs = axes[:, 0]
+        axes[0, 0].set_title("Without RTC", fontsize=16, fontweight='bold')
+        self.plot_waypoints(prev_chunk_to_plot, label="Previous Actions", color="green")
+        self.plot_waypoints(actions_no_rtc_plot, label="Predicted Actions", color="blue")
+
+        # Plot WITH RTC (right column)
+        self.axs = axes[:, 1]
+        axes[0, 1].set_title("With RTC", fontsize=16, fontweight='bold')
+        self.plot_waypoints(prev_chunk_to_plot, label="Previous Actions", color="green")
+        self.plot_waypoints(actions_rtc_plot, label="Predicted Actions", color="red")
 
         plt.tight_layout()
-        plt.savefig(f"actions_episodes_{selected_indices[0]}_{selected_indices[1]}.png", dpi=150)
-        logging.info(f"Saved actions comparison to actions_episodes_{selected_indices[0]}_{selected_indices[1]}.png")
+        filename = f"rtc_comparison_episodes_{selected_indices[0]}_{selected_indices[1]}.png"
+        plt.savefig(filename, dpi=150)
+        logging.info(f"Saved RTC comparison to {filename}")
         plt.close(fig)
 
         logging.info("Evaluation completed")
