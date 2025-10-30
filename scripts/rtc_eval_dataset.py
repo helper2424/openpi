@@ -186,6 +186,10 @@ class RTCDatasetEvaluator:
             prev_chunk_left_over=prev_chunk_left_over,
             execution_horizon=self.cfg.execution_horizon
         )
+
+        logging.info(f"result_rtc: {result_rtc}")
+        logging.info(f"result_rtc['actions']: {result_rtc['actions']}")
+        logging.info(f"result_rtc['tracking_history']: {result_rtc['tracking_history']}")
         actions_rtc = result_rtc["actions"]
         tracking_rtc = result_rtc.get("tracking_history", None)
 
