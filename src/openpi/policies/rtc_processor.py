@@ -57,7 +57,7 @@ class RTCProcessor:
         """
         self.rtc_config = rtc_config
 
-    def get_prefix_weights(start: int, end: int, total: int, schedule: RTCAttentionSchedule) -> jax.Array:
+    def get_prefix_weights(self, start: int, end: int, total: int, schedule: RTCAttentionSchedule) -> jax.Array:
         """With start=2, end=6, total=10, the output will be:
         1  1  4/5 3/5 2/5 1/5 0  0  0  0
             ^              ^
