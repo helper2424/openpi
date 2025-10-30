@@ -267,7 +267,7 @@ class Pi0(_model.BaseModel):
                 self.config.rtc_config.execution_horizon if self.config.rtc_config is not None else 10
             )
 
-            if self.config.rtc_config is not None and self.config.rtc_config.enabled:
+            if True:
                 jax.debug.print("=== USING RTC PATH ===")
                 jax.debug.print("inference_delay: {}", inference_delay)
                 jax.debug.print("prev_chunk_left_over shape: {}", prev_chunk_left_over.shape if prev_chunk_left_over is not None else None)
