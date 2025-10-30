@@ -48,10 +48,10 @@ class RTCDatasetEvaluator:
             sample_kwargs=cfg.sample_kwargs or {},
         )
 
-        self.policy.config.rtc_config = cfg.rtc_config
-        self.policy.init_rtc_processor(verbose=True)
+        self.policy._model.config.rtc_config = cfg.rtc_config
+        self.policy._model.init_rtc_processor(verbose=True)
 
-        logging.info(f"RTC config: {self.policy.config.rtc_config}")
+        logging.info(f"RTC config: {self.policy._model.config.rtc_config}")
 
         logging.info(f"Policy loaded successfully")
         logging.info(f"Model config: {self.train_cfg.model}")
