@@ -371,7 +371,7 @@ class Pi0(_model.BaseModel):
                 logger.info("=== USING NON-RTC PATH ===")
                 logger.info(f"rtc_processor: {self.rtc_processor}")
 
-                v_t = original_step_scan(x_t, time)
+                v_t = original_step_scan(carry)
 
                 # Build minimal tracking output for non-RTC case
                 # Still need to return a dict with same structure to avoid JAX tracer issues
