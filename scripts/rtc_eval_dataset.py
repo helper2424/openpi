@@ -41,18 +41,30 @@ class RTCDatasetEvaluator:
         logging.info(f"Loading policy from {cfg.checkpoint_path}")
         self.train_cfg = train_config.get_config(cfg.train_config_name)
 
-        # Load policy using the openpi policy_config
-        self.policy = policy_config.create_trained_policy(
+        # Create TWO policies: one with RTC and one without
+        # This is necessary because JAX's JIT compilation freezes the model state
+
+        # Policy WITH RTC
+        logging.info("Creating policy WITH RTC...")
+        self.policy_with_rtc = policy_config.create_trained_policy(
             train_config=self.train_cfg,
             checkpoint_dir=pathlib.Path(cfg.checkpoint_path),
             sample_kwargs=cfg.sample_kwargs or {},
         )
+        self.policy_with_rtc._model.init_rtc_processor(cfg.rtc_config)
 
-        # Replace the frozen config with a new one that includes RTC settings
-        # Since Pi0Config is frozen, we must use replace() to create a new instance
-        self.policy._model.init_rtc_processor(cfg.rtc_config)
+        # Policy WITHOUT RTC (disable by passing a config with enabled=False)
+        logging.info("Creating policy WITHOUT RTC...")
+        self.policy_without_rtc = policy_config.create_trained_policy(
+            train_config=self.train_cfg,
+            checkpoint_dir=pathlib.Path(cfg.checkpoint_path),
+            sample_kwargs=cfg.sample_kwargs or {},
+        )
+        # Initialize with disabled RTC
+        disabled_rtc_config = replace(cfg.rtc_config, enabled=False)
+        self.policy_without_rtc._model.init_rtc_processor(disabled_rtc_config)
 
-        logging.info(f"Policy loaded successfully")
+        logging.info(f"Policies loaded successfully")
         logging.info(f"Model config: {self.train_cfg.model}")
 
         # Create raw dataset without transforms for inference
@@ -133,16 +145,15 @@ class RTCDatasetEvaluator:
         logging.info("Running inference WITHOUT RTC")
         logging.info("=" * 80)
 
-        # Temporarily disable RTC
-        original_rtc_processor = self.policy._model.rtc_processor
-        self.policy._model.rtc_processor = None
+        # Use the policy without RTC
+        rtc_processor_no_rtc = self.policy_without_rtc._model.rtc_processor
+        if rtc_processor_no_rtc:
+            logging.info(f"Policy WITHOUT RTC - rtc_enabled: {rtc_processor_no_rtc.rtc_enabled()}")
+            logging.info(f"Policy WITHOUT RTC - config: {rtc_processor_no_rtc.rtc_config}")
+        else:
+            logging.info("Policy WITHOUT RTC - rtc_processor is None")
 
-        logging.info(f"original_rtc_processor: {original_rtc_processor.rtc_enabled()}")
-        logging.info(f"original_rtc_processor: {original_rtc_processor.rtc_config}")
-        logging.info(f"original_rtc_processor: {original_rtc_processor.rtc_config.execution_horizon}")
-        logging.info(f"original_rtc_processor: {original_rtc_processor.rtc_config.prefix_attention_schedule}")
-        logging.info(f"original_rtc_processor: {original_rtc_processor.rtc_config.max_guidance_weight}")
-        result_no_rtc = self.policy.infer(
+        result_no_rtc = self.policy_without_rtc.infer(
             obs,
             noise=noise,
             inference_delay=self.cfg.inference_delay,
@@ -155,19 +166,19 @@ class RTCDatasetEvaluator:
         logging.info("=" * 80)
         logging.info("Running inference WITH RTC")
         logging.info("=" * 80)
-        
-        # Restore RTC processor
-        self.policy._model.rtc_processor = original_rtc_processor
 
-        logging.info(f"policy_rtc_processor: {self.policy._model.rtc_processor.rtc_enabled()}")
-        logging.info(f"original_rtc_processor: {self.policy._model.rtc_processor.rtc_config}")
-        logging.info(f"policy_rtc_processor: {self.policy._model.rtc_processor.rtc_config.execution_horizon}")
-        logging.info(f"policy_rtc_processor: {self.policy._model.rtc_processor.rtc_config.prefix_attention_schedule}")
-        logging.info(f"policy_rtc_processor: {self.policy._model.rtc_processor.rtc_config.max_guidance_weight}")
+        # Use the policy with RTC
+        rtc_processor_with_rtc = self.policy_with_rtc._model.rtc_processor
+        if rtc_processor_with_rtc:
+            logging.info(f"Policy WITH RTC - rtc_enabled: {rtc_processor_with_rtc.rtc_enabled()}")
+            logging.info(f"Policy WITH RTC - config: {rtc_processor_with_rtc.rtc_config}")
+            logging.info(f"Policy WITH RTC - execution_horizon: {rtc_processor_with_rtc.rtc_config.execution_horizon}")
+            logging.info(f"Policy WITH RTC - prefix_attention_schedule: {rtc_processor_with_rtc.rtc_config.prefix_attention_schedule}")
+            logging.info(f"Policy WITH RTC - max_guidance_weight: {rtc_processor_with_rtc.rtc_config.max_guidance_weight}")
+        else:
+            logging.info("Policy WITH RTC - rtc_processor is None (ERROR: should not happen!)")
 
-
-
-        result_rtc = self.policy.infer(
+        result_rtc = self.policy_with_rtc.infer(
             obs,
             noise=noise,
             inference_delay=self.cfg.inference_delay,

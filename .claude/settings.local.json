@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile:*)",
+      "Bash(git log:*)",
+      "Bash(git checkout:*)",
+      "Bash(git cherry-pick:*)",
+      "Bash(git push:*)",
+      "Bash(gh pr create --title \"feat: Add RTC support with evaluation scripts and SAM policy\" --body \"$(cat <<''EOF''\n## Summary\n- Add RTC (Real-Time Control) evaluation scripts for dataset processing and evaluation\n- Implement RTC processor policy for real-time control capabilities\n- Add SAM (Segment Anything Model) policy integration\n- Update Pi0 model configuration to support RTC features\n\n## Changes\n- Added `scripts/rtc_eval.py` - RTC evaluation script with 686 lines\n- Added `scripts/rtc_eval_dataset.py` - RTC dataset evaluation utilities (216 lines)\n- Added `src/openpi/policies/rtc_processor.py` - RTC processor implementation (80 lines)\n- Added `src/openpi/policies/sam_policy.py` - SAM policy integration (1163 lines)\n- Updated `src/openpi/models/pi0.py` - Enhanced model with RTC support\n- Updated `src/openpi/models/pi0_config.py` - Added RTC configuration options\n- Updated `src/openpi/training/config.py` - Extended training config for RTC\n\n## Test plan\n- [ ] Test RTC evaluation scripts with sample dataset\n- [ ] Verify RTC processor functionality\n- [ ] Test SAM policy integration\n- [ ] Validate model updates and configuration changes\n- [ ] Run existing tests to ensure backward compatibility\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\nEOF\n)\" --head helper2424:feat/add-rtc-support --base main)",
+      "Read(//Users/helper2424/.ssh/**)",
+      "Bash(ssh-add:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(ssh -i ~/.ssh/id_rsa ubuntu@129.153.115.23 \"cd /lambda/nfs/rtc-check/openpi && git pull origin feat/add-rtc-support && uv run python scripts/rtc_eval_dataset.py --train-config-name cables10 --checkpoint-path /home/ubuntu/data/cables10/ --dataset-repo-id 1g0rrr/cables10 --seed 42\")",
+      "Bash(ssh -o StrictHostKeyChecking=no ubuntu@129.153.115.23 \"cd /lambda/nfs/rtc-check/openpi && git pull origin feat/add-rtc-support && uv run python scripts/rtc_eval_dataset.py --train-config-name cables10 --checkpoint-path /home/ubuntu/data/cables10/ --dataset-repo-id 1g0rrr/cables10 --seed 42\")",
+      "Bash(ssh ubuntu@129.153.115.23 \"cd /home/ubuntu/rtc-check/openpi && git pull origin feat/add-rtc-support && uv run python scripts/rtc_eval_dataset.py --train-config-name cables10 --checkpoint-path /home/ubuntu/data/cables10/ --dataset-repo-id 1g0rrr/cables10 --seed 42\")",
+      "Bash(ssh:*)",
+      "Bash(awk:*)",
+      "Bash(cat:*)",
+      "Bash(scp:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

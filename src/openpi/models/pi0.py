@@ -262,6 +262,8 @@ class Pi0(_model.BaseModel):
 
         # Debug prints before entering JAX-compiled loop
         logger.info(f"RTC Config enabled: {self.rtc_processor is not None}")
+        if self.rtc_processor is not None:
+            logger.info(f"RTC processor details: enabled={self.rtc_processor.rtc_enabled()}, config={self.rtc_processor.rtc_config}")
         logger.info(f"inference_delay: {inference_delay}")
         logger.info(f"prev_chunk_left_over: {prev_chunk_left_over} {prev_chunk_left_over.shape}")
 
