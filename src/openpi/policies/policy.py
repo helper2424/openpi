@@ -90,18 +90,36 @@ class Policy(BasePolicy):
         observation = _model.Observation.from_dict(inputs)
         start_time = time.monotonic()
 
-        # Call sample_actions
-        outputs = {
-            "state": inputs["state"],
-            "actions": self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs, **kwargs),
-        }
+        # Call sample_actions - it may return a tuple (actions, tracking_data)
+        sample_result = self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs, **kwargs)
+
+        # Handle both single return value and tuple
+        if isinstance(sample_result, tuple) and len(sample_result) == 2:
+            actions, tracking_history = sample_result
+            outputs = {
+                "state": inputs["state"],
+                "actions": actions,
+                "tracking_history": tracking_history,  # Store the tracking history
+            }
+        else:
+            outputs = {
+                "state": inputs["state"],
+                "actions": sample_result,
+            }
 
         model_time = time.monotonic() - start_time
+
+        # Extract tracking_history if present before transforming outputs
+        tracking_history = outputs.pop("tracking_history", None)
 
         if self._is_pytorch_model:
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
         else:
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
+
+        # Add tracking_history back if it was present
+        if tracking_history is not None:
+            outputs["tracking_history"] = tracking_history
 
         outputs = self._output_transform(outputs)
         outputs["policy_timing"] = {

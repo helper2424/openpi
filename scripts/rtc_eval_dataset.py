@@ -161,6 +161,7 @@ class RTCDatasetEvaluator:
             execution_horizon=self.cfg.execution_horizon
         )
         actions_no_rtc = result_no_rtc["actions"]
+        tracking_no_rtc = result_no_rtc.get("tracking_history", None)
 
         # ========== Run inference WITH RTC ==========
         logging.info("=" * 80)
@@ -186,6 +187,7 @@ class RTCDatasetEvaluator:
             execution_horizon=self.cfg.execution_horizon
         )
         actions_rtc = result_rtc["actions"]
+        tracking_rtc = result_rtc.get("tracking_history", None)
 
         # ========== Create side-by-side visualization ==========
         # Use min of 6 and model's action_dim for plots
@@ -221,8 +223,12 @@ class RTCDatasetEvaluator:
         logging.info(f"Saved RTC comparison to {filename}")
         plt.close(fig)
 
-        # Note: Detailed tracking disabled due to JAX compilation constraints
-        # JAX doesn't allow Python conditionals on traced values inside compiled functions
+        # ========== Create detailed RTC tracking visualization ==========
+        if tracking_rtc is not None:
+            logging.info("Creating detailed RTC tracking visualization...")
+            self.visualize_rtc_tracking(tracking_rtc, tracking_no_rtc, selected_indices)
+        else:
+            logging.info("No tracking data available for detailed visualization")
 
         logging.info("Evaluation completed")
         return {}
@@ -244,33 +250,37 @@ class RTCDatasetEvaluator:
             if j == 2:
                 self.axs[j].set_xlabel("Step #", fontsize=16)
 
-    def visualize_rtc_tracking(self, tracking: dict, selected_indices: list):
+    def visualize_rtc_tracking(self, tracking_rtc: dict, tracking_no_rtc: dict, selected_indices: list):
         """Create detailed visualization of RTC tracking data."""
         logging.info("Creating detailed RTC tracking visualizations...")
 
-        # Convert lists to numpy arrays for easier manipulation
-        if "x_t_history" in tracking and len(tracking["x_t_history"]) > 0:
-            x_t_history = np.array(tracking["x_t_history"])
-            v_t_history = np.array(tracking["v_t_history"])
-            time_history = np.array(tracking["time_history"])
+        # Check if we have RTC tracking data
+        if tracking_rtc is None or "x_t" not in tracking_rtc:
+            logging.warning("No RTC tracking data available for visualization")
+            return
 
-            # Create a comprehensive figure with multiple subplots
-            fig = plt.figure(figsize=(24, 16))
-            fig.suptitle(f"RTC Tracking Details - Episodes {selected_indices[0]} & {selected_indices[1]}", fontsize=20)
+        # Extract arrays from tracking dictionary
+        # Shape: [num_steps, batch_size, action_horizon, action_dim]
+        x_t_rtc = np.array(tracking_rtc["x_t"])
+        v_t_rtc = np.array(tracking_rtc["v_t"])
+        time_rtc = np.array(tracking_rtc["time"])
 
-            # 1. X_t evolution over timesteps
-            ax1 = plt.subplot(3, 3, 1)
-            num_steps = x_t_history.shape[0]
-            num_dims = min(3, x_t_history.shape[-1])
-            for i in range(num_dims):
-                ax1.plot(time_history, x_t_history[:, 0, 0, i], label=f"Dim {i}")
-            ax1.set_xlabel("Time (t)")
-            ax1.set_ylabel("X_t value")
-            ax1.set_title("X_t Evolution (first 3 dims)")
-            ax1.legend()
-            ax1.grid(True)
+        # Create figure
+        fig = plt.figure(figsize=(24, 16))
+        fig.suptitle(f"RTC Tracking Details - Episodes {selected_indices[0]} & {selected_indices[1]}", fontsize=20)
 
-            # 2. V_t (velocity) evolution
+        # 1. X_t evolution over timesteps
+        ax1 = plt.subplot(3, 3, 1)
+        num_dims = min(3, x_t_rtc.shape[-1])
+        for i in range(num_dims):
+            ax1.plot(time_rtc, x_t_rtc[:, 0, 0, i], label=f"Dim {i}")
+        ax1.set_xlabel("Time (t)")
+        ax1.set_ylabel("X_t value")
+        ax1.set_title("X_t Evolution (first 3 dims)")
+        ax1.legend()
+        ax1.grid(True)
+
+        # 2. V_t (velocity) evolution
             ax2 = plt.subplot(3, 3, 2)
             for i in range(num_dims):
                 ax2.plot(time_history, v_t_history[:, 0, 0, i], label=f"Dim {i}")

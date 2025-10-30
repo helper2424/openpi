@@ -233,7 +233,7 @@ class Pi0(_model.BaseModel):
         num_steps: int | at.Int[at.Array, ""] = 10,
         noise: at.Float[at.Array, "b ah ad"] | None = None,
         **kwargs: Any,
-    ) -> _model.Actions:
+    ) -> _model.Actions | tuple[_model.Actions, dict]:
 
         observation = _model.preprocess_observation(None, observation, train=False)
         # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
@@ -267,8 +267,12 @@ class Pi0(_model.BaseModel):
         logger.info(f"inference_delay: {inference_delay}")
         logger.info(f"prev_chunk_left_over: {prev_chunk_left_over} {prev_chunk_left_over.shape}")
 
-        def step(carry):
-            x_t, time = carry
+        # Create timesteps array for scan
+        timesteps = jnp.linspace(1.0, 0.0, num_steps + 1)
+
+        def step_scan(carry, t_input):
+            x_t = carry
+            time = t_input
 
             # Use rtc_config.execution_horizon as default only if rtc_processor is not None
             execution_horizon = kwargs.get(
@@ -354,9 +358,30 @@ class Pi0(_model.BaseModel):
                     jax.debug.print("RTC step - pinv_correction norm: {}", jnp.linalg.norm(pinv_correction))
 
                     v_t_corrected = v_t + guidance_weight * pinv_correction
-                    return v_t_corrected
 
-                v_t = pinv_corrected_velocity(observation, x_t, prev_chunk_left_over, time, prefix_tokens, prefix_mask, kv_cache)
+                    # Return both velocity and tracking data
+                    return v_t_corrected, {
+                        "x_1": x_1,
+                        "v_t": v_t_corrected,
+                        "error": error,
+                        "weights": weights,
+                        "guidance_weight": guidance_weight,
+                        "pinv_correction": pinv_correction,
+                    }
+
+                v_t, tracking_data = pinv_corrected_velocity(observation, x_t, prev_chunk_left_over, time, prefix_tokens, prefix_mask, kv_cache)
+
+                # Build tracking output for scan
+                scan_output = {
+                    "x_t": x_t,
+                    "v_t": v_t,
+                    "time": time,
+                    "x_1": tracking_data["x_1"],
+                    "error": tracking_data["error"],
+                    "weights": tracking_data["weights"],
+                    "guidance_weight": tracking_data["guidance_weight"],
+                    "pinv_correction": tracking_data["pinv_correction"],
+                }
             else:
                 logger.info("=== USING NON-RTC PATH ===")
                 logger.info(f"rtc_processor: {self.rtc_processor}")
@@ -391,15 +416,22 @@ class Pi0(_model.BaseModel):
                 assert prefix_out is None
                 v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
 
-            return x_t + dt * v_t, time + dt
+                # Build minimal tracking output for non-RTC case
+                scan_output = {
+                    "x_t": x_t,
+                    "v_t": v_t,
+                    "time": time,
+                }
 
-        def cond(carry):
-            x_t, time = carry
-            # robust to floating-point error
-            return time >= -dt / 2
+            # Update x_t for next iteration
+            x_t_next = x_t + dt * v_t
 
-        x_0, _ = jax.lax.while_loop(cond, step, (noise, 1.0))
+            # Return updated carry and scan output
+            return x_t_next, scan_output
 
-        # For now, return without tracking to avoid JAX compilation issues
-        # Tracking would require a complete restructure to work with JAX
-        return x_0
+        # Use scan instead of while_loop for tracking
+        x_0, tracking_history = jax.lax.scan(step_scan, noise, timesteps[:-1])
+
+        # Always return both to avoid JAX tracer issues
+        # The caller can decide whether to use the tracking data
+        return x_0, tracking_history
