@@ -1,5 +1,6 @@
 import enum
 import dataclasses
+import logging
 
 import jax
 import jax.numpy as jnp
@@ -72,6 +73,10 @@ class RTCProcessor:
         `end` takes precedence over `start` in the sense that, if `end < start`, then `start` is pushed down to `end`. Thus,
         if `end` is 0, then the entire prefix will always be ignored.
         """
+        logging.info("=" * 80)
+        logging.info(f"get_prefix_weights:")
+        logging.info(f"start: {start}, end: {end}, total: {total}, schedule: {schedule}")
+        logging.info("=" * 80)
         start = jnp.minimum(start, end)
         if schedule == RTCAttentionSchedule.ONES:
             w = jnp.ones(total)
