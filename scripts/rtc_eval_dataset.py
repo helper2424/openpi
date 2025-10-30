@@ -48,13 +48,12 @@ class RTCDatasetEvaluator:
             sample_kwargs=cfg.sample_kwargs or {},
         )
 
-        if self.policy._model.config.rtc_config is None:
-            self.policy._model.config.rtc_config = RTCConfig()
-            self.policy._model.config.rtc_config.enabled = self.cfg.rtc_config.enabled
-            self.policy._model.config.rtc_config.prefix_attention_schedule = self.cfg.rtc_config.prefix_attention_schedule
-            self.policy._model.config.rtc_config.max_guidance_weight = self.cfg.rtc_config.max_guidance_weight
-            self.policy._model.config.rtc_config.execution_horizon = self.cfg.rtc_config.execution_horizon
-
+        # Replace the frozen config with a new one that includes RTC settings
+        # Since Pi0Config is frozen, we must use replace() to create a new instance
+        self.policy._model.config = replace(
+            self.policy._model.config,
+            rtc_config=cfg.rtc_config
+        )
         self.policy._model.init_rtc_processor()
 
         logging.info(f"RTC config: {self.policy._model.config.rtc_config}")
