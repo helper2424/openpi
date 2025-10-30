@@ -254,7 +254,10 @@ class Pi0(_model.BaseModel):
         prev_chunk_left_over = kwargs.get("prev_chunk_left_over")
 
         #  Make padding for prev_chunk_left_over to match the action_horizon
-        prev_chunk_left_over = jnp.pad(prev_chunk_left_over, ((0, 0), (0, self.action_horizon - prev_chunk_left_over.shape[0]), (0, 0)))
+        # prev_chunk_left_over shape: (batch, time, action_dim)
+        # Pad the time dimension (axis 1) to match action_horizon
+        pad_amount = self.action_horizon - prev_chunk_left_over.shape[1]
+        prev_chunk_left_over = jnp.pad(prev_chunk_left_over, ((0, 0), (0, pad_amount), (0, 0)))
 
         # Debug prints before entering JAX-compiled loop
         logger.info(f"RTC Config enabled: {self.config.rtc_config is not None and self.config.rtc_config.enabled}")
