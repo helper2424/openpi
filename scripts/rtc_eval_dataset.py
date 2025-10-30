@@ -139,7 +139,7 @@ class RTCDatasetEvaluator:
         result = self.policy.infer(
             obs,
             noise=noise,
-            inference_delay=self.cfg.inference_delay,
+            inference_delay=4,
             prev_chunk_left_over=prev_chunk_left_over,
             execution_horizon=self.cfg.execution_horizon
         )
