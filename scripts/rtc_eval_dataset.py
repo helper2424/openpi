@@ -10,11 +10,14 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import numpy as np
+from openpi.policies import rtc_processor
 import tyro
 
 from openpi.policies import policy_config
 from openpi.training import config as train_config
 import openpi.training.data_loader as _data_loader
+from openpi.policies.rtc_processor import RTCConfig
+from openpi.policies import policy_config
 
 
 def set_seed(seed: int):
@@ -224,6 +227,15 @@ class Args:
         default=10,
         metadata={"help": "Execution horizon for RTC (number of timesteps for prefix weights)"},
     )
+
+    rtc_config: RTCConfig = field(
+        default=RTCConfig(
+            enabled = False,
+            prefix_attention_schedule = rtc_processor.RTCAttentionSchedule.EXP,
+            max_guidance_weight = 5.0,
+            execution_horizon = 10,
+        )
+    )
     
 def main(args: Args):
     """Main entry point for RTC dataset evaluation."""
@@ -238,6 +250,7 @@ def main(args: Args):
     logging.info(f"Dataset: {args.dataset_repo_id}")
     logging.info(f"Action horizon: {args.action_horizon}")
     logging.info(f"Seed: {args.seed}")
+    logging.info(f"RTC config: {args.rtc_config}")
     logging.info("=" * 80)
 
     evaluator = RTCDatasetEvaluator(args)
