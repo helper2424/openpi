@@ -4,13 +4,13 @@ import logging
 import time
 import traceback
 
+from openpi.serving.utils import create_policy, clear_device_memory, Checkpoint
 from openpi_client import base_policy as _base_policy
 from openpi_client import msgpack_numpy
 import websockets.asyncio.server as _server
 import websockets.frames
 
 logger = logging.getLogger(__name__)
-
 
 class WebsocketPolicyServer:
     """Serves a policy using the websocket protocol. See websocket_client_policy.py for a client implementation.
@@ -20,17 +20,22 @@ class WebsocketPolicyServer:
 
     def __init__(
         self,
-        policy: _base_policy.BasePolicy,
+        policies_configs: list[Checkpoint],
         host: str = "0.0.0.0",
         port: int | None = None,
         metadata: dict | None = None,
+        default_prompt: str | None = None,
     ) -> None:
-        self._policy = policy
+        self._policies_configs = policies_configs
         self._host = host
         self._port = port
         self._metadata = metadata or {}
+        self._default_prompt = default_prompt
         logging.getLogger("websockets.server").setLevel(logging.INFO)
 
+        self._policy_index = 0
+        self._policy = create_policy(self._policies_configs[self._policy_index], self._default_prompt)
+        
     def serve_forever(self) -> None:
         asyncio.run(self.run())
 
@@ -56,6 +61,16 @@ class WebsocketPolicyServer:
             try:
                 start_time = time.monotonic()
                 obs = msgpack_numpy.unpackb(await websocket.recv())
+
+                try:
+                    if obs['state'][0] == 1000:
+                        del self._policy
+                        clear_device_memory()
+                        self._policy_index = (self._policy_index + 1) % len(self._policies_configs)
+                        self._policy = create_policy(self._policies_configs[self._policy_index], self._default_prompt)
+                except:
+                    logger.error(f"Error updating policy index: {traceback.format_exc()}")
+                    pass
 
                 infer_time = time.monotonic()
                 action = self._policy.infer(obs)

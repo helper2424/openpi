@@ -10,6 +10,8 @@ from openpi.policies import policy_config as _policy_config
 from openpi.serving import websocket_policy_server
 from openpi.training import config as _config
 
+from openpi.serving.utils import create_policy, clear_device_memory, Checkpoint
+
 
 class EnvMode(enum.Enum):
     """Supported environments."""
@@ -20,14 +22,7 @@ class EnvMode(enum.Enum):
     LIBERO = "libero"
 
 
-@dataclasses.dataclass
-class Checkpoint:
-    """Load a policy from a trained checkpoint."""
 
-    # Training config name (e.g., "pi0_aloha_sim").
-    config: str
-    # Checkpoint directory (e.g., "checkpoints/pi0_aloha_sim/exp/10000").
-    dir: str
 
 
 @dataclasses.dataclass
@@ -48,11 +43,9 @@ class Args:
 
     # Port to serve the policy on.
     port: int = 8000
-    # Record the policy's behavior for debugging.
-    record: bool = False
 
-    # Specifies how to load the policy. If not provided, the default policy for the environment will be used.
-    policy: Checkpoint | Default = dataclasses.field(default_factory=Default)
+    policies_dirs: list[str] = dataclasses.field(default_factory=list)
+    policies_configs: list[str] = dataclasses.field(default_factory=list)
 
 
 # Default checkpoints that should be used for each environment.
@@ -85,34 +78,33 @@ def create_default_policy(env: EnvMode, *, default_prompt: str | None = None) ->
     raise ValueError(f"Unsupported environment mode: {env}")
 
 
-def create_policy(args: Args) -> _policy.Policy:
-    """Create a policy from the given arguments."""
-    match args.policy:
-        case Checkpoint():
-            return _policy_config.create_trained_policy(
-                _config.get_config(args.policy.config), args.policy.dir, default_prompt=args.default_prompt
-            )
-        case Default():
-            return create_default_policy(args.env, default_prompt=args.default_prompt)
-
-
 def main(args: Args) -> None:
-    policy = create_policy(args)
-    policy_metadata = policy.metadata
-
-    # Record the policy's behavior.
-    if args.record:
-        policy = _policy.PolicyRecorder(policy, "policy_records")
-
     hostname = socket.gethostname()
     local_ip = socket.gethostbyname(hostname)
     logging.info("Creating server (host: %s, ip: %s)", hostname, local_ip)
 
+    if len(args.policies_dirs) <= 0:
+        raise ValueError("policies_dirs must be provided")
+    if len(args.policies_configs) <= 0:
+        raise ValueError("policies_configs must be provided")
+    
+    if len(args.policies_dirs) != len(args.policies_configs):
+        raise ValueError("policies_dirs and policies_configs must have the same length")
+    
+    policies_configs = []
+    for policy_dir, policy_config in zip(args.policies_dirs, args.policies_configs):
+        policies_configs.append(Checkpoint(config=policy_config, dir=policy_dir))
+    
+    # Initialize the policies before using them
+    for policy in policies_configs:
+        clear_device_memory()
+        create_policy(policy)
+
     server = websocket_policy_server.WebsocketPolicyServer(
-        policy=policy,
+        policies_configs=policies_configs,
         host="0.0.0.0",
         port=args.port,
-        metadata=policy_metadata,
+        default_prompt=args.default_prompt,
     )
     server.serve_forever()
 
