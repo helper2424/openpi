@@ -50,7 +50,7 @@ class RTCDatasetEvaluator:
 
         self.policy.config.rtc_config = cfg.rtc_config
         self.policy.init_rtc_processor(verbose=True)
-        
+
         logging.info(f"RTC config: {self.policy.config.rtc_config}")
 
         logging.info(f"Policy loaded successfully")
@@ -235,7 +235,7 @@ class Args:
 
     rtc_config: RTCConfig = field(
         default_factory=lambda: RTCConfig(
-            enabled = False,
+            enabled = True,
             prefix_attention_schedule = rtc_processor.RTCAttentionSchedule.EXP,
             max_guidance_weight = 5.0,
             execution_horizon = 10,
