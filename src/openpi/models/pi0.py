@@ -321,7 +321,7 @@ class Pi0(_model.BaseModel):
         def step_scan(carry):
             x_t, time= carry
             if use_rtc:
-                @functools.partial(jax.vmap, in_axes=(0, 0, 0))  # over batch
+                # @functools.partial(jax.vmap, in_axes=(0, 0, 0))  # over batch
                 def pinv_corrected_velocity(x_t, y, time):
                     def denoiser(x_t):
                         v_t = original_step_scan(x_t, time)
