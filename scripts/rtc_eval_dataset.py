@@ -106,6 +106,9 @@ class RTCDatasetEvaluator:
         if len(prev_chunk_left_over.shape) > 1:
             # Take first half based on model's action horizon
             prev_chunk_left_over = prev_chunk_left_over[:model_action_horizon // 2]
+            # Add batch dimension to match observation batch size
+            prev_chunk_left_over = prev_chunk_left_over[np.newaxis, ...]  # Shape: (1, time, action_dim)
+            logging.info(f"prev_chunk_left_over shape after adding batch dim: {prev_chunk_left_over.shape}")
         else:
             logging.warning("Actions have unexpected shape, skipping evaluation")
             return {}
@@ -152,8 +155,11 @@ class RTCDatasetEvaluator:
 
         # Plot actions
         self.axs = axs
-        self.plot_waypoints(prev_chunk_left_over, label="Previous Actions (Episode 1)", color="green")
-        self.plot_waypoints(actions, label="Predicted Actions (Episode 2)", color="blue")
+        # Remove batch dimension for plotting
+        prev_chunk_to_plot = prev_chunk_left_over[0] if prev_chunk_left_over.ndim == 3 else prev_chunk_left_over
+        actions_to_plot = actions[0] if actions.ndim == 3 else actions
+        self.plot_waypoints(prev_chunk_to_plot, label="Previous Actions (Episode 1)", color="green")
+        self.plot_waypoints(actions_to_plot, label="Predicted Actions (Episode 2)", color="blue")
 
         plt.tight_layout()
         plt.savefig(f"actions_episodes_{selected_indices[0]}_{selected_indices[1]}.png", dpi=150)
@@ -269,4 +275,5 @@ def main(args: Args):
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO, force=True)
+    logging.info("Starting RTC dataset evaluation")
     main(tyro.cli(Args))
