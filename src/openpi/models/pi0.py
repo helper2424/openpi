@@ -329,7 +329,7 @@ class Pi0(_model.BaseModel):
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
                     weights = self.rtc_processor.get_prefix_weights(
-                        inference_delay, execution_horizon, self.action_chunk_size, self.config.rtc_config.prefix_attention_schedule
+                        inference_delay, execution_horizon, self.action_horizon, self.config.rtc_config.prefix_attention_schedule
                     )
                     error = (y - x_1) * weights[:, None]
                     pinv_correction = vjp_fun(error)[0]
