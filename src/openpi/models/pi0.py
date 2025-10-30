@@ -357,7 +357,7 @@ class Pi0(_model.BaseModel):
                         assert prefix_out is None
                         v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
                         # Remove batch dimension from outputs
-                        return (x_t_batched + v_t * (1 - t))[0], v_t[0]
+                        return (x_t_batched - v_t * (1 - t))[0], v_t[0]
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
 
@@ -375,7 +375,7 @@ class Pi0(_model.BaseModel):
                     guidance_weight = jnp.minimum(c * inv_r2, self.rtc_processor.rtc_config.max_guidance_weight)
 
 
-                    v_t_corrected = v_t + guidance_weight * pinv_correction
+                    v_t_corrected = v_t - guidance_weight * pinv_correction
 
                     # Return both velocity and tracking data
                     return v_t_corrected, {
