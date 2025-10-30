@@ -330,7 +330,7 @@ We will collect common issues and their solutions here. If you encounter an issu
     --train-config-name cables10 \
     --checkpoint-path /home/ubuntu/rtc-check/cables10/ \
     --dataset-repo-id 1g0rrr/cables10 \
-    --rtc-config.enabled True \
+     --rtc-config.enabled \
     --rtc-config.prefix-attention-schedule EXP \
     --rtc-config.max-guidance-weight 5.0 \
     --rtc-config.execution-horizon 10 \
