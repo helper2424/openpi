@@ -324,7 +324,7 @@ class Pi0(_model.BaseModel):
                 # @functools.partial(jax.vmap, in_axes=(0, 0, 0))  # over batch
                 def pinv_corrected_velocity(x_t, y, time):
                     def denoiser(x_t):
-                        v_t = original_step_scan(x_t, time)
+                        v_t = original_step_scan((x_t, time))
 
                         # Remove batch dimension from outputs
                         return (x_t - v_t * (1 - time))[0], v_t[0]
