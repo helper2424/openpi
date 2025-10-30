@@ -48,11 +48,13 @@ class RTCDatasetEvaluator:
             sample_kwargs=cfg.sample_kwargs or {},
         )
 
-        # Replace the frozen config with a new one that includes RTC settings
-        # self.policy._model.config.rtc_config.enabled = True
-        # self.policy._model.config.rtc_config.prefix_attention_schedule = rtc_processor.RTCAttentionSchedule.EXP
-        # self.policy._model.config.rtc_config.max_guidance_weight = 5.0
-        # self.policy._model.config.rtc_config.execution_horizon = 10
+        if self.policy._model.config.rtc_config is None:
+            self.policy._model.config.rtc_config = RTCConfig()
+            self.policy._model.config.rtc_config.enabled = self.cfg.rtc_config.enabled
+            self.policy._model.config.rtc_config.prefix_attention_schedule = self.cfg.rtc_config.prefix_attention_schedule
+            self.policy._model.config.rtc_config.max_guidance_weight = self.cfg.rtc_config.max_guidance_weight
+            self.policy._model.config.rtc_config.execution_horizon = self.cfg.rtc_config.execution_horizon
+
         self.policy._model.init_rtc_processor()
 
         logging.info(f"RTC config: {self.policy._model.config.rtc_config}")
