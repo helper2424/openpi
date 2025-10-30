@@ -336,15 +336,8 @@ class Pi0(_model.BaseModel):
             execution_horizon = execution_horizon_value
 
             if use_rtc:
-                # Note: logger.info won't work inside JIT-compiled function
-                # We'll capture this info in the tracking output instead
-
-                # KV cache structure: each element is [num_layers, batch, seq_len, ...]
-                # So we need to vmap over axis 1 for kv_cache, not axis 0
-                kv_cache_in_axes = jax.tree.map(lambda x: 1 if x is not None else None, kv_cache)
-
-                @functools.partial(jax.vmap, in_axes=(0, 0, 0, None, 0, 0, kv_cache_in_axes))  # over batch
-                def pinv_corrected_velocity(obs, x_t, y, t, prefix_tokens_i, prefix_mask_i, kv_cache_i):
+                @functools.partial(jax.vmap, in_axes=(0, 0, 0, None, 0, 0))  # over batch
+                def pinv_corrected_velocity(x_t, y, t):
                     def denoiser(x_t):
                         v_t = original_step_scan(x_t, time)
 
@@ -353,11 +346,9 @@ class Pi0(_model.BaseModel):
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
 
-                    logging.info(f"Before get_prefix_weights: inference_delay: {inference_delay}, execution_horizon: {execution_horizon}, action_horizon: {self.action_horizon}, prefix_attention_schedule: {self.rtc_processor.rtc_config.prefix_attention_schedule}")
                     weights = self.rtc_processor.get_prefix_weights(
                         inference_delay, execution_horizon, self.action_horizon, self.rtc_processor.rtc_config.prefix_attention_schedule
                     )
-                    logging.info(f"After get_prefix_weights: weights: {weights}")
 
                     error = (y - x_1) * weights[:, None]
                     pinv_correction = vjp_fun(error)[0]
@@ -378,7 +369,7 @@ class Pi0(_model.BaseModel):
                         "pinv_correction": pinv_correction,
                     }
 
-                v_t, tracking_data = pinv_corrected_velocity(observation, x_t, prev_chunk_left_over, time, prefix_tokens, prefix_mask, kv_cache)
+                v_t, tracking_data = pinv_corrected_velocity(x_t, prev_chunk_left_over, time)
 
                 # Build tracking output for scan
                 scan_output = {
@@ -418,8 +409,12 @@ class Pi0(_model.BaseModel):
             # Return updated carry and scan output
             return x_t_next, scan_output
 
-        # Use scan instead of while_loop for tracking
-        x_0, tracking_history = jax.lax.scan(step_scan, noise, timesteps[:-1])
+        def cond(carry):
+            x_t, time = carry
+            # robust to floating-point error
+            return time >= -dt / 2
+
+        x_0, tracking_history = jax.lax.while_loop(cond, step_scan, (noise, 1.0))
 
         # Always return both to avoid JAX tracer issues
         # The caller can decide whether to use the tracking data
