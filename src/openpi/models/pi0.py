@@ -253,10 +253,13 @@ class Pi0(_model.BaseModel):
         inference_delay = kwargs.get("inference_delay")
         prev_chunk_left_over = kwargs.get("prev_chunk_left_over")
 
+        #  Make padding for prev_chunk_left_over to match the action_horizon
+        prev_chunk_left_over = jnp.pad(prev_chunk_left_over, ((0, 0), (0, self.action_horizon - prev_chunk_left_over.shape[0]), (0, 0)))
+
         # Debug prints before entering JAX-compiled loop
         logger.info(f"RTC Config enabled: {self.config.rtc_config is not None and self.config.rtc_config.enabled}")
         logger.info(f"inference_delay: {inference_delay}")
-        logger.info(f"prev_chunk_left_over: {prev_chunk_left_over}")
+        logger.info(f"prev_chunk_left_over: {prev_chunk_left_over} {prev_chunk_left_over.shape}")
 
         def step(carry):
             x_t, time = carry
