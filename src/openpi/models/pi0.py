@@ -111,7 +111,7 @@ class Pi0(_model.BaseModel):
     def init_rtc_processor(self):
         self.rtc_processor = None
 
-        if self.config.rtc_config is not None and self.config.rtc_config.enabled:
+        if True:
             self.rtc_processor = rtc_processor.RTCProcessor(self.config.rtc_config)
             
     @at.typecheck
