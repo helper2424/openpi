@@ -50,7 +50,7 @@ class RTCDatasetEvaluator:
 
         # Replace the frozen config with a new one that includes RTC settings
         self.policy._model.config = replace(self.policy._model.config, rtc_config=cfg.rtc_config)
-        self.policy._model.init_rtc_processor(verbose=True)
+        self.policy._model.init_rtc_processor()
 
         logging.info(f"RTC config: {self.policy._model.config.rtc_config}")
 
