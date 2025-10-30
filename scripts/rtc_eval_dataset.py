@@ -234,7 +234,10 @@ class Args:
         metadata={"help": "Execution horizon for RTC (number of timesteps for prefix weights)"},
     )
 
-    rtc_config: RTCConfig
+    rtc_config: RTCConfig = field(
+        default_factory=RTCConfig,
+        metadata={"help": "RTC configuration for real-time control"},
+    )
     
 def main(args: Args):
     """Main entry point for RTC dataset evaluation."""
