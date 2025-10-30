@@ -234,14 +234,7 @@ class Args:
         metadata={"help": "Execution horizon for RTC (number of timesteps for prefix weights)"},
     )
 
-    rtc_config: RTCConfig = field(
-        default_factory=lambda: RTCConfig(
-            enabled = True,
-            prefix_attention_schedule = rtc_processor.RTCAttentionSchedule.EXP,
-            max_guidance_weight = 5.0,
-            execution_horizon = 10,
-        )
-    )
+    rtc_config: RTCConfig
     
 def main(args: Args):
     """Main entry point for RTC dataset evaluation."""
