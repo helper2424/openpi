@@ -417,10 +417,18 @@ class Pi0(_model.BaseModel):
                 v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
 
                 # Build minimal tracking output for non-RTC case
+                # Still need to return a dict with same structure to avoid JAX tracer issues
+                # Just fill with dummy values or minimal data
                 scan_output = {
                     "x_t": x_t,
                     "v_t": v_t,
                     "time": time,
+                    # Add dummy values for RTC-specific keys to maintain consistent structure
+                    "x_1": jnp.zeros_like(x_t),
+                    "error": jnp.zeros_like(x_t),
+                    "weights": jnp.zeros(self.action_horizon),
+                    "guidance_weight": jnp.zeros(()),
+                    "pinv_correction": jnp.zeros_like(x_t),
                 }
 
             # Update x_t for next iteration
