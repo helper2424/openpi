@@ -264,8 +264,25 @@ class Pi0(_model.BaseModel):
         logger.info(f"RTC Config enabled: {self.rtc_processor is not None}")
         if self.rtc_processor is not None:
             logger.info(f"RTC processor details: enabled={self.rtc_processor.rtc_enabled()}, config={self.rtc_processor.rtc_config}")
+            logger.info(f"RTC execution_horizon from config: {self.rtc_processor.rtc_config.execution_horizon}")
+            logger.info(f"RTC prefix_attention_schedule: {self.rtc_processor.rtc_config.prefix_attention_schedule}")
+            logger.info(f"RTC max_guidance_weight: {self.rtc_processor.rtc_config.max_guidance_weight}")
         logger.info(f"inference_delay: {inference_delay}")
-        logger.info(f"prev_chunk_left_over: {prev_chunk_left_over} {prev_chunk_left_over.shape}")
+        logger.info(f"prev_chunk_left_over shape: {prev_chunk_left_over.shape if prev_chunk_left_over is not None else None}")
+        logger.info(f"action_horizon: {self.action_horizon}")
+        logger.info(f"action_dim: {self.action_dim}")
+
+        # Test weights calculation outside of JAX compilation
+        if self.rtc_processor is not None and self.rtc_processor.rtc_enabled():
+            test_weights = self.rtc_processor.get_prefix_weights(
+                inference_delay,
+                kwargs.get("execution_horizon", self.rtc_processor.rtc_config.execution_horizon),
+                self.action_horizon,
+                self.rtc_processor.rtc_config.prefix_attention_schedule
+            )
+            logger.info(f"TEST WEIGHTS CALCULATION: shape={test_weights.shape}, values={test_weights}")
+            logger.info(f"TEST WEIGHTS: sum={float(jnp.sum(test_weights))}, max={float(jnp.max(test_weights))}, min={float(jnp.min(test_weights))}")
+            logger.info(f"TEST WEIGHTS: non-zero count={int(jnp.sum(test_weights > 0))}")
 
         # Create timesteps array for scan
         timesteps = jnp.linspace(1.0, 0.0, num_steps + 1)
@@ -281,12 +298,8 @@ class Pi0(_model.BaseModel):
             )
 
             if self.rtc_processor is not None and self.rtc_processor.rtc_enabled():
-                logger.info(f"=== USING RTC PATH === rtc_processor: {self.rtc_processor}")
-                jax.debug.print("=== USING RTC PATH ===")
-                jax.debug.print("inference_delay: {}", inference_delay)
-                jax.debug.print("prev_chunk_left_over shape: {}", prev_chunk_left_over.shape if prev_chunk_left_over is not None else None)
-                jax.debug.print("execution_horizon: {}", self.rtc_processor.rtc_config.execution_horizon)
-                jax.debug.print("time: {}", time)
+                # Note: logger.info won't work inside JIT-compiled function
+                # We'll capture this info in the tracking output instead
 
                 # KV cache structure: each element is [num_layers, batch, seq_len, ...]
                 # So we need to vmap over axis 1 for kv_cache, not axis 0
@@ -343,17 +356,9 @@ class Pi0(_model.BaseModel):
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
 
-                    # Debug logging for weights calculation
-                    jax.debug.print("get_prefix_weights args - start: {}, end: {}, total: {}, schedule: {}",
-                                  inference_delay, execution_horizon, self.action_horizon,
-                                  self.rtc_processor.rtc_config.prefix_attention_schedule)
-
                     weights = self.rtc_processor.get_prefix_weights(
                         inference_delay, execution_horizon, self.action_horizon, self.rtc_processor.rtc_config.prefix_attention_schedule
                     )
-
-                    jax.debug.print("weights computed: {}", weights)
-                    jax.debug.print("weights sum: {}, max: {}, min: {}", jnp.sum(weights), jnp.max(weights), jnp.min(weights))
 
                     error = (y - x_1) * weights[:, None]
                     pinv_correction = vjp_fun(error)[0]
@@ -362,10 +367,6 @@ class Pi0(_model.BaseModel):
                     c = jnp.nan_to_num((1 - t) / t, posinf=self.rtc_processor.rtc_config.max_guidance_weight)
                     guidance_weight = jnp.minimum(c * inv_r2, self.rtc_processor.rtc_config.max_guidance_weight)
 
-                    # Debug logging for tracking
-                    jax.debug.print("RTC step - time: {}, guidance_weight: {}", t, guidance_weight)
-                    jax.debug.print("RTC step - error norm: {}", jnp.linalg.norm(error))
-                    jax.debug.print("RTC step - pinv_correction norm: {}", jnp.linalg.norm(pinv_correction))
 
                     v_t_corrected = v_t + guidance_weight * pinv_correction
 
@@ -449,11 +450,6 @@ class Pi0(_model.BaseModel):
 
         # Use scan instead of while_loop for tracking
         x_0, tracking_history = jax.lax.scan(step_scan, noise, timesteps[:-1])
-
-        # Debug logging for tracking using jax.debug.print
-        jax.debug.print("Pi0 sample_actions: x_0 shape: {}", x_0.shape)
-        jax.debug.print("Pi0 sample_actions: tracking_history type: {}", type(tracking_history))
-        # Note: Can't check keys dynamically in JIT, but we know the structure
 
         # Always return both to avoid JAX tracer issues
         # The caller can decide whether to use the tracking data

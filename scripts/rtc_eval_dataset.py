@@ -190,7 +190,20 @@ class RTCDatasetEvaluator:
         logging.info(f"result_rtc keys: {list(result_rtc.keys())}")
         logging.info(f"result_rtc['actions'] shape: {result_rtc['actions'].shape}")
         if 'tracking_history' in result_rtc:
-            logging.info(f"result_rtc['tracking_history']: {result_rtc['tracking_history']}")
+            tracking_rtc = result_rtc['tracking_history']
+            if tracking_rtc is not None:
+                logging.info(f"Tracking history keys: {list(tracking_rtc.keys())}")
+                if 'weights' in tracking_rtc:
+                    weights = np.array(tracking_rtc['weights'])
+                    logging.info(f"Weights shape: {weights.shape}")
+                    logging.info(f"First timestep weights: {weights[0] if weights.shape[0] > 0 else 'empty'}")
+                    logging.info(f"Weights stats - min: {np.min(weights)}, max: {np.max(weights)}, mean: {np.mean(weights)}")
+                    logging.info(f"Non-zero weights count: {np.sum(weights > 0)}")
+                if 'guidance_weight' in tracking_rtc:
+                    gw = np.array(tracking_rtc['guidance_weight'])
+                    logging.info(f"Guidance weights: min={np.min(gw)}, max={np.max(gw)}, mean={np.mean(gw)}")
+            else:
+                logging.info("tracking_history is None")
         else:
             logging.info("No 'tracking_history' key in result_rtc")
         actions_rtc = result_rtc["actions"]
