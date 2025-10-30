@@ -285,21 +285,11 @@ class Pi0(_model.BaseModel):
 
         # For JAX compilation, we need to determine RTC path outside the compiled function
         use_rtc = rtc_is_enabled
-        execution_horizon_value = kwargs.get(
-            "execution_horizon",
-            self.rtc_processor.rtc_config.execution_horizon if self.rtc_processor is not None else 10
-        )
-        rtc_schedule = self.rtc_processor.rtc_config.prefix_attention_schedule if self.rtc_processor is not None else None
-        rtc_max_guidance = self.rtc_processor.rtc_config.max_guidance_weight if self.rtc_processor is not None else 5.0
 
-        # Create timesteps array for scan
-        timesteps = jnp.linspace(1.0, 0.0, num_steps + 1)
-
-        def original_step_scan(carry, t_input):
-            x_t = carry
-            time = t_input
+        def original_step_scan(carry):
+            x_t, time = carry
             suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
-                observation, x_t, jnp.broadcast_to(time, batch_size)
+                observation, x_t, time
             )
             # `suffix_attn_mask` is shape (b, suffix_len, suffix_len) indicating how the suffix tokens can attend to each
             # other
@@ -328,33 +318,28 @@ class Pi0(_model.BaseModel):
             assert prefix_out is None
             return self.action_out_proj(suffix_out[:, -self.action_horizon :])
 
-        def step_scan(carry, t_input):
-            x_t = carry
-            time = t_input
-
-            # Use the pre-computed values
-            execution_horizon = execution_horizon_value
-
+        def step_scan(carry):
+            x_t, time= carry
             if use_rtc:
-                @functools.partial(jax.vmap, in_axes=(0, 0, 0, None, 0, 0))  # over batch
-                def pinv_corrected_velocity(x_t, y, t):
+                @functools.partial(jax.vmap, in_axes=(0, 0, 0))  # over batch
+                def pinv_corrected_velocity(x_t, y, time):
                     def denoiser(x_t):
                         v_t = original_step_scan(x_t, time)
 
                         # Remove batch dimension from outputs
-                        return (x_t - v_t * (1 - t))[0], v_t[0]
+                        return (x_t - v_t * (1 - time))[0], v_t[0]
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
 
                     weights = self.rtc_processor.get_prefix_weights(
-                        inference_delay, execution_horizon, self.action_horizon, self.rtc_processor.rtc_config.prefix_attention_schedule
+                        inference_delay, self.rtc_processor.rtc_config.execution_horizon, self.action_horizon, self.rtc_processor.rtc_config.prefix_attention_schedule
                     )
 
                     error = (y - x_1) * weights[:, None]
                     pinv_correction = vjp_fun(error)[0]
                     # constants from paper
-                    inv_r2 = (t**2 + (1 - t) ** 2) / ((1 - t) ** 2)
-                    c = jnp.nan_to_num((1 - t) / t, posinf=self.rtc_processor.rtc_config.max_guidance_weight)
+                    inv_r2 = (time**2 + (1 - time) ** 2) / ((1 - time) ** 2)
+                    c = jnp.nan_to_num((1 - time) / time, posinf=self.rtc_processor.rtc_config.max_guidance_weight)
                     guidance_weight = jnp.minimum(c * inv_r2, self.rtc_processor.rtc_config.max_guidance_weight)
 
                     v_t_corrected = v_t - guidance_weight * pinv_correction
