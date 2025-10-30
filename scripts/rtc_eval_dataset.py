@@ -137,7 +137,11 @@ class RTCDatasetEvaluator:
         original_rtc_processor = self.policy._model.rtc_processor
         self.policy._model.rtc_processor = None
 
-        logging.info(f"original_rtc_processor: {original_rtc_processor}")
+        logging.info(f"original_rtc_processor: {original_rtc_processor.rtc_enabled()}")
+        logging.info(f"original_rtc_processor: {original_rtc_processor.rtc_config}")
+        logging.info(f"original_rtc_processor: {original_rtc_processor.rtc_config.execution_horizon}")
+        logging.info(f"original_rtc_processor: {original_rtc_processor.rtc_config.prefix_attention_schedule}")
+        logging.info(f"original_rtc_processor: {original_rtc_processor.rtc_config.max_guidance_weight}")
         result_no_rtc = self.policy.infer(
             obs,
             noise=noise,
@@ -147,13 +151,21 @@ class RTCDatasetEvaluator:
         )
         actions_no_rtc = result_no_rtc["actions"]
 
-        # Restore RTC processor
-        self.policy._model.rtc_processor = original_rtc_processor
-
         # ========== Run inference WITH RTC ==========
         logging.info("=" * 80)
         logging.info("Running inference WITH RTC")
         logging.info("=" * 80)
+        
+        # Restore RTC processor
+        self.policy._model.rtc_processor = original_rtc_processor
+
+        logging.info(f"policy_rtc_processor: {self.policy._model.rtc_processor.rtc_enabled()}")
+        logging.info(f"original_rtc_processor: {self.policy._model.rtc_processor.rtc_config}")
+        logging.info(f"policy_rtc_processor: {self.policy._model.rtc_processor.rtc_config.execution_horizon}")
+        logging.info(f"policy_rtc_processor: {self.policy._model.rtc_processor.rtc_config.prefix_attention_schedule}")
+        logging.info(f"policy_rtc_processor: {self.policy._model.rtc_processor.rtc_config.max_guidance_weight}")
+
+
 
         result_rtc = self.policy.infer(
             obs,
