@@ -274,7 +274,11 @@ class Pi0(_model.BaseModel):
                 jax.debug.print("execution_horizon: {}", execution_horizon)
                 jax.debug.print("time: {}", time)
 
-                @functools.partial(jax.vmap, in_axes=(0, 0, 0, None, 0, 0, 0))  # over batch
+                # KV cache structure: each element is [num_layers, batch, seq_len, ...]
+                # So we need to vmap over axis 1 for kv_cache, not axis 0
+                kv_cache_in_axes = jax.tree.map(lambda x: 1 if x is not None else None, kv_cache)
+
+                @functools.partial(jax.vmap, in_axes=(0, 0, 0, None, 0, 0, kv_cache_in_axes))  # over batch
                 def pinv_corrected_velocity(obs, x_t, y, t, prefix_tokens_i, prefix_mask_i, kv_cache_i):
                     def denoiser(x_t):
                         # Add batch dimension since embed_suffix expects batched inputs
@@ -304,8 +308,12 @@ class Pi0(_model.BaseModel):
                         # `positions` is shape (b, suffix_len) indicating the positions of the suffix tokens
                         positions = jnp.sum(prefix_mask_i_batched, axis=-1)[:, None] + jnp.cumsum(suffix_mask, axis=-1) - 1
 
-                        # Add batch dimension to kv_cache_i (which is unbatched from vmap)
-                        kv_cache_i_batched = jax.tree.map(lambda x: x[None, ...] if x is not None else None, kv_cache_i)
+                        # kv_cache_i already has the right structure [num_layers, 1, seq_len, ...]
+                        # after vmap over axis 1, so we need to add back the batch dimension at axis 1
+                        kv_cache_i_batched = jax.tree.map(
+                            lambda x: jnp.expand_dims(x, axis=1) if x is not None else None,
+                            kv_cache_i
+                        )
 
                         (prefix_out, suffix_out), _ = self.PaliGemma.llm(
                             [None, suffix_tokens],
