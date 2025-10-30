@@ -328,10 +328,10 @@ We will collect common issues and their solutions here. If you encounter an issu
 ```
  git pull origin  ; uv run python scripts/rtc_eval_dataset.py \
     --train-config-name cables10 \
-    --checkpoint-path /home/ubuntu/data/cables10/ \
+    --checkpoint-path /home/ubuntu/rtc-check/cables10/ \
     --dataset-repo-id 1g0rrr/cables10 \
-    --rtc-config.enabled true \
-    --rtc-config.prefix-attention-schedule exp \
+    --rtc-config.enabled True \
+    --rtc-config.prefix-attention-schedule EXP \
     --rtc-config.max-guidance-weight 5.0 \
     --rtc-config.execution-horizon 10 \
     --seed 42     

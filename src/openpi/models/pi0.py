@@ -250,11 +250,12 @@ class Pi0(_model.BaseModel):
         positions = jnp.cumsum(prefix_mask, axis=1) - 1
         _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
 
+        inference_delay = kwargs.get("inference_delay")
+        prev_chunk_left_over = kwargs.get("prev_chunk_left_over")
+
         def step(carry):
             x_t, time = carry
 
-            inference_delay = kwargs.get("inference_delay")
-            prev_chunk_left_over = kwargs.get("prev_chunk_left_over")
             # Use rtc_config.execution_horizon as default only if rtc_config is not None
             execution_horizon = kwargs.get(
                 "execution_horizon",
@@ -262,6 +263,12 @@ class Pi0(_model.BaseModel):
             )
 
             if self.config.rtc_config is not None and self.config.rtc_config.enabled:
+
+                print(f"inference_delay: {inference_delay}")
+                print(f"prev_chunk_left_over: {prev_chunk_left_over}")
+
+                print("USE RTC way")
+
                 @functools.partial(jax.vmap, in_axes=(0, 0, 0, None))  # over batch
                 def pinv_corrected_velocity(obs, x_t, y, t):
                     def denoiser(x_t):
