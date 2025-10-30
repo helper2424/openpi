@@ -53,16 +53,16 @@ class RTCDatasetEvaluator:
         )
         self.policy_with_rtc._model.init_rtc_processor(cfg.rtc_config)
 
-        # Policy WITHOUT RTC (disable by passing a config with enabled=False)
-        logging.info("Creating policy WITHOUT RTC...")
-        self.policy_without_rtc = policy_config.create_trained_policy(
-            train_config=self.train_cfg,
-            checkpoint_dir=pathlib.Path(cfg.checkpoint_path),
-            sample_kwargs=cfg.sample_kwargs or {},
-        )
+        # # Policy WITHOUT RTC (disable by passing a config with enabled=False)
+        # logging.info("Creating policy WITHOUT RTC...")
+        # self.policy_without_rtc = policy_config.create_trained_policy(
+        #     train_config=self.train_cfg,
+        #     checkpoint_dir=pathlib.Path(cfg.checkpoint_path),
+        #     sample_kwargs=cfg.sample_kwargs or {},
+        # )
         # Initialize with disabled RTC
-        disabled_rtc_config = replace(cfg.rtc_config, enabled=False)
-        self.policy_without_rtc._model.init_rtc_processor(disabled_rtc_config)
+        # disabled_rtc_config = replace(cfg.rtc_config, enabled=False)
+        # self.policy_without_rtc._model.init_rtc_processor(disabled_rtc_config)
 
         logging.info(f"Policies loaded successfully")
         logging.info(f"Model config: {self.train_cfg.model}")
