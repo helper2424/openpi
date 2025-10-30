@@ -254,6 +254,8 @@ class RTCDatasetEvaluator:
         """Create detailed visualization of RTC tracking data."""
         logging.info("Creating detailed RTC tracking visualizations...")
 
+        logging.info(f"tracking_rtc: {tracking_rtc}")
+        logging.info(f"tracking_no_rtc: {tracking_no_rtc}")
         # Check if we have RTC tracking data
         if tracking_rtc is None or "x_t" not in tracking_rtc:
             logging.warning("No RTC tracking data available for visualization")
