@@ -275,6 +275,7 @@ class Pi0(_model.BaseModel):
             )
 
             if self.rtc_processor is not None and self.rtc_processor.rtc_enabled():
+                logger.info("=== USING RTC PATH ===", self.rtc_processor)
                 jax.debug.print("=== USING RTC PATH ===")
                 jax.debug.print("inference_delay: {}", inference_delay)
                 jax.debug.print("prev_chunk_left_over shape: {}", prev_chunk_left_over.shape if prev_chunk_left_over is not None else None)
@@ -350,6 +351,9 @@ class Pi0(_model.BaseModel):
 
                 v_t = pinv_corrected_velocity(observation, x_t, prev_chunk_left_over, time, prefix_tokens, prefix_mask, kv_cache)
             else:
+                logger.info("=== USING NON-RTC PATH ===")
+                logger.info("rtc_processor", self.rtc_processor)
+
                 suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
                     observation, x_t, jnp.broadcast_to(time, batch_size)
                 )
