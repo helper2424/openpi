@@ -120,8 +120,15 @@ class RTCProcessor:
         if prev_chunk_left_over is None:
             # First step, no guidance
             v_t = original_denoise_step_partial(x_t)
-            # Record step data even without RTC guidance (disabled from compilation)
-            torch.compiler.disable(self._record_tracking_data_simple)(time, x_t, v_t)
+            # Record step data even without RTC guidance
+            if self.tracker.enabled:
+                time_scalar = time.item() if isinstance(time, torch.Tensor) else time
+                # Detach and clone to avoid being part of compilation graph
+                self.tracker.record_step(
+                    time=time_scalar,
+                    x_t=x_t.detach().clone(),
+                    v_t=v_t.detach().clone()
+                )
             return v_t
 
         squeezed = False
@@ -184,38 +191,26 @@ class RTCProcessor:
 
         result = v_t - guidance_weight * correction
 
-        # Record step data with RTC tracking (disabled from compilation to avoid recompilations)
-        torch.compiler.disable(self._record_tracking_data)(
-            time, x_t, result, x1_t, correction, err, weights, guidance_weight
-        )
+        # Record step data with RTC tracking - detach/clone to avoid being part of compilation graph
+        if self.tracker.enabled:
+            time_scalar = time.item() if isinstance(time, torch.Tensor) else time
+            guidance_weight_scalar = guidance_weight.item() if isinstance(guidance_weight, torch.Tensor) else guidance_weight
+            self.tracker.record_step(
+                time=time_scalar,
+                x_t=x_t.detach().clone(),
+                v_t=result.detach().clone(),
+                x1_t=x1_t.detach().clone(),
+                correction=correction.detach().clone(),
+                error=err.detach().clone(),
+                weights=weights.detach().clone(),
+                guidance_weight=guidance_weight_scalar,
+            )
 
         # Remove the batch dimension if it was added
         if squeezed:
             result = result.squeeze(0)
 
         return result
-
-    def _record_tracking_data_simple(self, time, x_t, v_t):
-        """Record simple tracking data without RTC guidance - separated to avoid torch.compile recompilations."""
-        if self.tracker.enabled:
-            time_scalar = time.item() if isinstance(time, torch.Tensor) else time
-            self.tracker.record_step(time=time_scalar, x_t=x_t, v_t=v_t)
-
-    def _record_tracking_data(self, time, x_t, v_t, x1_t, correction, error, weights, guidance_weight):
-        """Record tracking data - separated to avoid torch.compile recompilations."""
-        if self.tracker.enabled:
-            time_scalar = time.item() if isinstance(time, torch.Tensor) else time
-            guidance_weight_scalar = guidance_weight.item() if isinstance(guidance_weight, torch.Tensor) else guidance_weight
-            self.tracker.record_step(
-                time=time_scalar,
-                x_t=x_t,
-                v_t=v_t,
-                x1_t=x1_t,
-                correction=correction,
-                error=error,
-                weights=weights,
-                guidance_weight=guidance_weight_scalar,
-            )
 
     def get_prefix_weights(self, start, end, total):
         start = min(start, end)

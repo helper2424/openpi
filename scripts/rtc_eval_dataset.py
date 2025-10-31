@@ -271,14 +271,14 @@ class RTCDatasetEvaluator:
         # Plot NO RTC (left column)
         self.axs = axes[:, 0]
         axes[0, 0].set_title("Without RTC", fontsize=16, fontweight='bold')
-        self.plot_waypoints(prev_chunk_to_plot, label="Previous Actions", color="green")
+        self.plot_waypoints(prev_chunk_to_plot, label="Previous Actions", color="red")
         self.plot_waypoints(actions_no_rtc_plot, label="Predicted Actions", color="blue")
 
         # Plot WITH RTC (right column)
         self.axs = axes[:, 1]
         axes[0, 1].set_title("With RTC", fontsize=16, fontweight='bold')
-        self.plot_waypoints(prev_chunk_to_plot, label="Previous Actions", color="green")
-        self.plot_waypoints(actions_rtc_plot, label="Predicted Actions", color="red")
+        self.plot_waypoints(prev_chunk_to_plot, label="Previous Actions", color="red")
+        self.plot_waypoints(actions_rtc_plot, label="Predicted Actions", color="blue")
 
         plt.tight_layout()
         filename = f"rtc_comparison_episodes_{selected_indices[0]}_{selected_indices[1]}.png"
