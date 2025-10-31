@@ -293,6 +293,11 @@ class RTCDatasetEvaluator:
         else:
             logging.info("No tracking data available for detailed visualization")
 
+        # ========== Create denoising step visualizations ==========
+        logging.info("Creating denoising step visualizations...")
+        self.visualize_denoising_steps(tracking_no_rtc, "no_rtc")
+        self.visualize_denoising_steps(tracking_rtc, "with_rtc")
+
         # ========== Combine denoising visualizations side-by-side ==========
         self.combine_denoising_visualizations()
 
@@ -447,6 +452,90 @@ class RTCDatasetEvaluator:
         logging.info(f"Saved RTC tracking details to {tracking_filename}")
         plt.close(fig)
 
+    def visualize_denoising_steps(self, tracking_data: dict, variant_name: str):
+        """Create denoising step visualizations from tracking data.
+
+        Args:
+            tracking_data: Dictionary with tracking history from RTCTracker
+            variant_name: Name variant (e.g., "no_rtc" or "with_rtc")
+        """
+        if tracking_data is None or "x_t" not in tracking_data:
+            logging.warning(f"No tracking data available for {variant_name} visualization")
+            return
+
+        # Extract data
+        x_t_history = np.array(tracking_data["x_t"])  # [num_steps, batch, action_horizon, action_dim]
+        v_t_history = np.array(tracking_data["v_t"])
+        time_history = np.array(tracking_data["time"])
+
+        # Get dimensions
+        num_steps = x_t_history.shape[0]
+        action_dim = min(6, x_t_history.shape[-1])  # Plot first 6 dimensions
+
+        # Create x_t visualization
+        fig_xt, axes_xt = plt.subplots(action_dim, 1, figsize=(12, 12))
+        if action_dim == 1:
+            axes_xt = [axes_xt]
+
+        fig_xt.suptitle(f"X_t Denoising Trajectory ({variant_name})", fontsize=16)
+
+        for dim in range(action_dim):
+            ax = axes_xt[dim]
+            # Plot trajectory for each denoising step
+            for step in range(num_steps):
+                x_t_step = x_t_history[step, 0, :, dim]  # [action_horizon]
+                alpha = 0.3 + 0.7 * (step / max(1, num_steps - 1))
+                ax.plot(x_t_step, alpha=alpha, linewidth=1, color='blue')
+
+            # Highlight first and last
+            ax.plot(x_t_history[0, 0, :, dim], color='green', linewidth=2, label='Initial', alpha=0.8)
+            ax.plot(x_t_history[-1, 0, :, dim], color='red', linewidth=2, label='Final', alpha=0.8)
+
+            ax.set_ylabel(f"Dim {dim}", fontsize=12)
+            ax.grid(True, alpha=0.3)
+            if dim == 0:
+                ax.legend(loc='upper right')
+            if dim == action_dim - 1:
+                ax.set_xlabel("Action Horizon", fontsize=12)
+
+        plt.tight_layout()
+        xt_filename = f"pi0_pytorch_x_t_{variant_name}_denoise_steps.png"
+        plt.savefig(xt_filename, dpi=150)
+        logging.info(f"Saved x_t denoising visualization to {xt_filename}")
+        plt.close(fig_xt)
+
+        # Create v_t visualization
+        fig_v, axes_v = plt.subplots(action_dim, 1, figsize=(12, 12))
+        if action_dim == 1:
+            axes_v = [axes_v]
+
+        fig_v.suptitle(f"V_t Velocity Trajectory ({variant_name})", fontsize=16)
+
+        for dim in range(action_dim):
+            ax = axes_v[dim]
+            # Plot velocity for each denoising step
+            for step in range(num_steps):
+                v_t_step = v_t_history[step, 0, :, dim]  # [action_horizon]
+                alpha = 0.3 + 0.7 * (step / max(1, num_steps - 1))
+                ax.plot(v_t_step, alpha=alpha, linewidth=1, color='purple')
+
+            # Highlight first and last
+            ax.plot(v_t_history[0, 0, :, dim], color='green', linewidth=2, label='Initial', alpha=0.8)
+            ax.plot(v_t_history[-1, 0, :, dim], color='red', linewidth=2, label='Final', alpha=0.8)
+
+            ax.set_ylabel(f"Dim {dim}", fontsize=12)
+            ax.grid(True, alpha=0.3)
+            if dim == 0:
+                ax.legend(loc='upper right')
+            if dim == action_dim - 1:
+                ax.set_xlabel("Action Horizon", fontsize=12)
+
+        plt.tight_layout()
+        v_filename = f"pi0_pytorch_v_{variant_name}_denoise_steps.png"
+        plt.savefig(v_filename, dpi=150)
+        logging.info(f"Saved v_t velocity visualization to {v_filename}")
+        plt.close(fig_v)
+
     def combine_denoising_visualizations(self):
         """Combine non-RTC and RTC denoising visualizations side-by-side."""
         import os
@@ -565,7 +654,7 @@ class Args:
     )
 
     rtc_config: RTCConfig = field(
-        default_factory=RTCConfig,
+        default_factory=lambda: RTCConfig(debug=True),  # Enable debug for tracking in evaluation
         metadata={"help": "RTC configuration for real-time control"},
     )
     
