@@ -101,6 +101,14 @@ class RTCProcessor:
                 "Install it with: uv pip install torchviz graphviz"
             )
 
+    def rtc_enabled(self) -> bool:
+        """Check if RTC is enabled.
+
+        Returns:
+            bool: True if RTC is enabled, False otherwise
+        """
+        return self.rtc_config.enabled
+
     @staticmethod
     def _tensor_stats(tensor: Tensor, name: str = "tensor") -> str:
         """Generate readable statistics string for a tensor.
