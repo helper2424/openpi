@@ -9,6 +9,7 @@ from typing import Any
 import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
+import matplotlib.image as mpimg
 import numpy as np
 from openpi.policies import rtc_processor
 import tyro
@@ -292,6 +293,9 @@ class RTCDatasetEvaluator:
         else:
             logging.info("No tracking data available for detailed visualization")
 
+        # ========== Combine denoising visualizations side-by-side ==========
+        self.combine_denoising_visualizations()
+
         logging.info("Evaluation completed")
         return {}
 
@@ -442,6 +446,66 @@ class RTCDatasetEvaluator:
         plt.savefig(tracking_filename, dpi=150)
         logging.info(f"Saved RTC tracking details to {tracking_filename}")
         plt.close(fig)
+
+    def combine_denoising_visualizations(self):
+        """Combine non-RTC and RTC denoising visualizations side-by-side."""
+        import os
+
+        # Check if visualization files exist
+        xt_no_rtc_file = "pi0_pytorch_x_t_no_rtc_denoise_steps.png"
+        xt_rtc_file = "pi0_pytorch_x_t_with_rtc_denoise_steps.png"
+        v_no_rtc_file = "pi0_pytorch_v_no_rtc_denoise_steps.png"
+        v_rtc_file = "pi0_pytorch_v_with_rtc_denoise_steps.png"
+
+        files_exist = all(os.path.exists(f) for f in [xt_no_rtc_file, xt_rtc_file, v_no_rtc_file, v_rtc_file])
+
+        if not files_exist:
+            logging.warning("Some denoising visualization files not found, skipping combination")
+            return
+
+        logging.info("Combining denoising visualizations side-by-side...")
+
+        # Load images
+        xt_no_rtc_img = mpimg.imread(xt_no_rtc_file)
+        xt_rtc_img = mpimg.imread(xt_rtc_file)
+        v_no_rtc_img = mpimg.imread(v_no_rtc_file)
+        v_rtc_img = mpimg.imread(v_rtc_file)
+
+        # Create combined figure for x_t
+        fig_xt, axes_xt = plt.subplots(1, 2, figsize=(24, 12))
+        fig_xt.suptitle("X_t Denoising Trajectories Comparison", fontsize=18, fontweight='bold')
+
+        axes_xt[0].imshow(xt_no_rtc_img)
+        axes_xt[0].set_title("Without RTC", fontsize=16, fontweight='bold')
+        axes_xt[0].axis('off')
+
+        axes_xt[1].imshow(xt_rtc_img)
+        axes_xt[1].set_title("With RTC", fontsize=16, fontweight='bold')
+        axes_xt[1].axis('off')
+
+        plt.tight_layout()
+        combined_xt_file = "pi0_pytorch_x_t_comparison.png"
+        plt.savefig(combined_xt_file, dpi=150, bbox_inches='tight')
+        logging.info(f"Saved combined x_t visualization to {combined_xt_file}")
+        plt.close(fig_xt)
+
+        # Create combined figure for v_t
+        fig_v, axes_v = plt.subplots(1, 2, figsize=(24, 12))
+        fig_v.suptitle("V_t Velocity Trajectories Comparison", fontsize=18, fontweight='bold')
+
+        axes_v[0].imshow(v_no_rtc_img)
+        axes_v[0].set_title("Without RTC", fontsize=16, fontweight='bold')
+        axes_v[0].axis('off')
+
+        axes_v[1].imshow(v_rtc_img)
+        axes_v[1].set_title("With RTC", fontsize=16, fontweight='bold')
+        axes_v[1].axis('off')
+
+        plt.tight_layout()
+        combined_v_file = "pi0_pytorch_v_comparison.png"
+        plt.savefig(combined_v_file, dpi=150, bbox_inches='tight')
+        logging.info(f"Saved combined v_t visualization to {combined_v_file}")
+        plt.close(fig_v)
 
 @dataclass
 class Args:

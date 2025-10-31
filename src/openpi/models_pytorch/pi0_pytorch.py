@@ -604,21 +604,23 @@ class PI0Pytorch(nn.Module):
 
         # Save visualization of x_t denoise steps (only if using internal figures)
         if not use_provided_axes and self.viz_fig is not None:
-            plt.figure(self.viz_fig.number)
-
-            # Determine filename based on RTC status
-            rtc_enabled = self.rtc_processor.rtc_config.enabled
-            if rtc_enabled and prev_chunk_left_over is not None:
-                xt_name = "pi0_pytorch_x_t_with_rtc_denoise_steps.png"
-                v_name = "pi0_pytorch_v_with_rtc_denoise_steps.png"
-                # Plot ground truth when RTC is enabled
+            # Plot ground truth on BOTH RTC and non-RTC charts
+            if prev_chunk_left_over is not None:
+                plt.figure(self.viz_fig.number)
                 plot_waypoints(
                     self.viz_axs, prev_chunk_left_over, start_from=0, color="red", label="Ground truth"
                 )
+
+            # Determine filename based on RTC status
+            rtc_enabled = self.rtc_processor.rtc_config.enabled
+            if rtc_enabled:
+                xt_name = "pi0_pytorch_x_t_with_rtc_denoise_steps.png"
+                v_name = "pi0_pytorch_v_with_rtc_denoise_steps.png"
             else:
                 xt_name = "pi0_pytorch_x_t_no_rtc_denoise_steps.png"
                 v_name = "pi0_pytorch_v_no_rtc_denoise_steps.png"
 
+            plt.figure(self.viz_fig.number)
             plt.savefig(xt_name)
             plt.close(self.viz_fig)
 
