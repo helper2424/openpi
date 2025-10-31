@@ -529,7 +529,7 @@ class PI0Pytorch(nn.Module):
             if self.rtc_processor.rtc_config.enabled and prev_chunk_left_over is not None:
                 execution_horizon = kwargs.get("execution_horizon", self.rtc_processor.rtc_config.execution_horizon)
 
-                v_t, correction, x1_t, error = self.rtc_processor.denoise_step(
+                v_t = self.rtc_processor.denoise_step(
                     x_t=x_t,
                     prev_chunk_left_over=prev_chunk_left_over,
                     inference_delay=inference_delay,
@@ -537,6 +537,8 @@ class PI0Pytorch(nn.Module):
                     original_denoise_step_partial=denoise_step_partial_call,
                     execution_horizon=execution_horizon,
                 )
+                # Extract correction, x1_t, error from tracker for visualization
+                correction, x1_t, error = self.rtc_processor.tracker.get_last_step_data()
             else:
                 v_t = denoise_step_partial_call(x_t)
 

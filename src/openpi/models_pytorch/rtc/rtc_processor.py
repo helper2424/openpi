@@ -124,7 +124,7 @@ class RTCProcessor:
             if self.tracker.enabled:
                 time_scalar = time.item() if isinstance(time, torch.Tensor) else time
                 self.tracker.record_step(time=time_scalar, x_t=x_t, v_t=v_t)
-            return v_t, None, None, None
+            return v_t
 
         squeezed = False
         if len(x_t.shape) < 3:
@@ -204,11 +204,8 @@ class RTCProcessor:
         # Remove the batch dimension if it was added
         if squeezed:
             result = result.squeeze(0)
-            correction = correction.squeeze(0)
-            x1_t = x1_t.squeeze(0)
-            err = err.squeeze(0)
 
-        return result, correction, x1_t, err
+        return result
 
     def get_prefix_weights(self, start, end, total):
         start = min(start, end)

@@ -89,6 +89,23 @@ class RTCTracker:
         self.steps.append(step_data)
         self._current_step += 1
 
+    def get_last_step_data(self) -> tuple[Tensor | None, Tensor | None, Tensor | None]:
+        """Get correction, x1_t, and error from the last recorded step.
+
+        Returns:
+            Tuple of (correction, x1_t, error) from the last step. Returns (None, None, None) if no steps recorded.
+        """
+        if not self.enabled or len(self.steps) == 0:
+            return None, None, None
+
+        last_step = self.steps[-1]
+        # Return tensors - they're already detached and on CPU from record_step
+        correction = last_step.correction
+        x1_t = last_step.x1_t
+        error = last_step.error
+
+        return correction, x1_t, error
+
     def get_tracking_history(self) -> dict:
         """Get tracking history in a format compatible with visualization code.
 
