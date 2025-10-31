@@ -271,6 +271,9 @@ class RTCProcessor:
             # Add batch dimension
             prev_chunk_left_over = prev_chunk_left_over.unsqueeze(0)
 
+        # Ensure prev_chunk_left_over is on the same device as x_t
+        prev_chunk_left_over = prev_chunk_left_over.to(x_t.device)
+
         if execution_horizon is None:
             execution_horizon = self.rtc_config.execution_horizon
 
