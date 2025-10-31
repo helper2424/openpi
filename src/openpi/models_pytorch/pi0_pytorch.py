@@ -1,6 +1,8 @@
 import logging
 import math
 
+import matplotlib.pyplot as plt
+import numpy as np
 import torch
 from torch import Tensor
 from torch import nn
@@ -9,6 +11,8 @@ import torch.nn.functional as F  # noqa: N812
 import openpi.models.gemma as _gemma
 from openpi.models_pytorch.gemma_pytorch import PaliGemmaWithExpertModel
 import openpi.models_pytorch.preprocessing_pytorch as _preprocessing
+from openpi.models_pytorch.modeling_rtc import RTCProcessor
+from openpi.policies.rtc_processor import RTCConfig
 
 
 def get_safe_dtype(target_dtype, device_type):
@@ -81,6 +85,39 @@ def make_att_2d_masks(pad_masks, att_masks):
     return att_2d_masks & pad_2d_masks
 
 
+def plot_waypoints(axs, chunk, start_from: int = 0, color: str | None = None, label: str | None = None):
+    """Plot action trajectories across multiple dimensions.
+
+    Args:
+        axs: Array of matplotlib axes (one per action dimension)
+        chunk: Action chunk tensor of shape (batch, time, action_dim)
+        start_from: Starting timestep for x-axis
+        color: Line color
+        label: Line label for legend
+    """
+    # Handle batch dimension
+    if len(chunk.shape) == 3:
+        chunk = chunk[0].cpu().numpy()
+    else:
+        chunk = chunk.cpu().numpy()
+
+    # Limit to 6 action dimensions to match number of subplots
+    num_dims = min(chunk.shape[-1], 6)
+    for j in range(num_dims):
+        axs[j].plot(
+            np.arange(start_from, start_from + chunk.shape[0]),
+            chunk[:, j],
+            color=color,
+            label=label,
+        )
+        axs[j].set_ylabel("Joint angle", fontsize=14)
+        axs[j].grid()
+        plt.tick_params(labelsize=14)
+        axs[j].legend(loc="upper right", fontsize=14)
+        if j == 2:
+            axs[j].set_xlabel("Step #", fontsize=16)
+
+
 class PI0Pytorch(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -114,6 +151,17 @@ class PI0Pytorch(nn.Module):
         # Initialize gradient checkpointing flag
         self.gradient_checkpointing_enabled = False
 
+        # Initialize visualization tracking variables
+        self.viz_fig = None
+        self.viz_axs = None
+        self.viz_v_fig = None
+        self.viz_v_axs = None
+        self.denoise_step_counter = 0
+
+        # Initialize RTC processor
+        rtc_config = getattr(config, 'rtc_config', None)
+        self.init_rtc_processor(rtc_config)
+
         msg = "transformers_replace is not installed correctly. Please install it with `uv pip install transformers==4.53.2` and `cp -r ./src/openpi/models_pytorch/transformers_replace/* .venv/lib/python3.11/site-packages/transformers/`."
         try:
             from transformers.models.siglip import check
@@ -122,6 +170,22 @@ class PI0Pytorch(nn.Module):
                 raise ValueError(msg)
         except ImportError:
             raise ValueError(msg) from None
+
+    def init_rtc_processor(self, rtc_config: RTCConfig = None):
+        """Initialize the RTC processor with the given configuration.
+
+        Args:
+            rtc_config: RTCConfig instance or None. If None, creates a default config with enabled=True.
+        """
+        if rtc_config is None:
+            # Create default RTC config similar to JAX version
+            rtc_config = RTCConfig()
+
+        self.rtc_processor = RTCProcessor(rtc_config=rtc_config, verbose=False)
+        logging.info(f"Initialized RTC processor: enabled={rtc_config.enabled}, "
+                    f"execution_horizon={rtc_config.execution_horizon}, "
+                    f"max_guidance_weight={rtc_config.max_guidance_weight}, "
+                    f"prefix_attention_schedule={rtc_config.prefix_attention_schedule}")
 
     def gradient_checkpointing_enable(self):
         """Enable gradient checkpointing for memory optimization."""
@@ -373,9 +437,30 @@ class PI0Pytorch(nn.Module):
         return F.mse_loss(u_t, v_t, reduction="none")
 
     @torch.no_grad()
-    def sample_actions(self, device, observation, noise=None, num_steps=10) -> Tensor:
-        """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
+    def sample_actions(self, device, observation, noise=None, num_steps=10, prev_chunk_left_over=None, inference_delay=0, **kwargs) -> tuple[Tensor, dict]:
+        """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)
+
+        Args:
+            device: Device to run inference on
+            observation: Current observation
+            noise: Optional noise to use for diffusion sampling
+            num_steps: Number of diffusion steps
+            prev_chunk_left_over: Unexecuted actions from previous chunk for RTC guidance
+            inference_delay: Number of steps to delay before using RTC guidance
+            viz_xt_axs: Optional matplotlib axes for plotting x_t trajectories (array of 6 axes)
+            viz_vt_axs: Optional matplotlib axes for plotting v_t trajectories (array of 6 axes)
+            viz_x1t_axs: Optional matplotlib axes for plotting x1_t predicted state and error (array of 6 axes)
+                         When RTC is enabled, plots both x1_t (solid line) and error (orange dashed line)
+
+        Returns:
+            Tuple of (actions, tracking_history) where tracking_history contains RTC debugging info
+        """
         bsize = observation.state.shape[0]
+
+        # Extract visualization axes from kwargs
+        viz_xt_axs = kwargs.pop("viz_xt_axs", None)
+        viz_vt_axs = kwargs.pop("viz_vt_axs", None)
+        viz_x1t_axs = kwargs.pop("viz_x1t_axs", None)
         if noise is None:
             actions_shape = (bsize, self.config.action_horizon, self.config.action_dim)
             noise = self.sample_noise(actions_shape, device)
@@ -398,24 +483,165 @@ class PI0Pytorch(nn.Module):
             use_cache=True,
         )
 
+        # Pad prev_chunk_left_over to match action_horizon and action_dim if provided
+        if prev_chunk_left_over is not None:
+            # prev_chunk_left_over shape: (batch, time, action_dim)
+            time_pad = self.config.action_horizon - prev_chunk_left_over.shape[1]
+            action_dim_pad = self.config.action_dim - prev_chunk_left_over.shape[2]
+            if time_pad > 0 or action_dim_pad > 0:
+                prev_chunk_left_over = torch.nn.functional.pad(
+                    prev_chunk_left_over,
+                    (0, action_dim_pad, 0, time_pad, 0, 0),  # (left, right) for each dim from right to left
+                )
+                logging.info(f"Padded prev_chunk_left_over to shape: {prev_chunk_left_over.shape}")
+
         dt = -1.0 / num_steps
         dt = torch.tensor(dt, dtype=torch.float32, device=device)
 
         x_t = noise
         time = torch.tensor(1.0, dtype=torch.float32, device=device)
+        correction = None
+        x1_t = None
+        error = None
+        use_provided_axes = viz_xt_axs is not None and viz_vt_axs is not None
+
         while time >= -dt / 2:
             expanded_time = time.expand(bsize)
-            v_t = self.denoise_step(
-                state,
-                prefix_pad_masks,
-                past_key_values,
-                x_t,
-                expanded_time,
+
+            # Partial call of the function, using lambda to wrap denoise_step
+            # Pass x_t as positional argument since it could have different naming in different models
+            denoise_step_partial_call = lambda input_x_t: self.denoise_step(
+                state=state,
+                prefix_pad_masks=prefix_pad_masks,
+                past_key_values=past_key_values,
+                x_t=input_x_t,
+                timestep=expanded_time,
             )
 
-            # Euler step - use new tensor assignment instead of in-place operation
+            if self.rtc_processor.rtc_config.enabled and prev_chunk_left_over is not None:
+                execution_horizon = kwargs.get("execution_horizon", self.rtc_processor.rtc_config.execution_horizon)
+
+                v_t, correction, x1_t, error = self.rtc_processor.denoise_step(
+                    x_t=x_t,
+                    prev_chunk_left_over=prev_chunk_left_over,
+                    inference_delay=inference_delay,
+                    time=time,
+                    original_denoise_step_partial=denoise_step_partial_call,
+                    execution_horizon=execution_horizon,
+                )
+            else:
+                v_t = denoise_step_partial_call(x_t)
+
+            # Visualize x_t and v_t trajectories
+            if not use_provided_axes:
+                if self.viz_fig is None:
+                    # Create figure once on first denoise step
+                    self.viz_fig, self.viz_axs = plt.subplots(6, 1, figsize=(12, 12))
+                    self.viz_v_fig, self.viz_v_axs = plt.subplots(6, 1, figsize=(12, 12))
+                xt_axs = self.viz_axs
+                vt_axs = self.viz_v_axs
+            else:
+                xt_axs = viz_xt_axs
+                vt_axs = viz_vt_axs
+
+            # Define colors for different denoise steps (using a colormap)
+            colors = plt.cm.viridis(np.linspace(0, 1, num_steps))
+            color = colors[self.denoise_step_counter % len(colors)]
+
+            # Plot this denoise step
+            plot_waypoints(xt_axs, x_t, start_from=0, color=color, label=f"Step {self.denoise_step_counter}")
+            plot_waypoints(vt_axs, v_t, start_from=0, color=color, label=f"Step {self.denoise_step_counter}")
+
+            # Plot correction if RTC is enabled
+            if correction is not None:
+                plot_waypoints(
+                    vt_axs,
+                    correction,
+                    start_from=0,
+                    color="red",
+                    label=f"Step corr {self.denoise_step_counter}",
+                )
+
+            # Plot x1_t if axes provided and RTC is enabled
+            if viz_x1t_axs is not None and x1_t is not None:
+                plot_waypoints(
+                    viz_x1t_axs,
+                    x1_t,
+                    start_from=0,
+                    color=color,
+                    label=f"x1_t Step {self.denoise_step_counter}",
+                )
+
+                # Plot error on the same axes with different color
+                if error is not None:
+                    # Handle batch dimension if present
+                    if len(error.shape) == 3:
+                        error_chunk = error[0].cpu().numpy()
+                    else:
+                        error_chunk = error.cpu().numpy()
+
+                    num_dims = min(error_chunk.shape[-1], 6)
+                    for j in range(num_dims):
+                        viz_x1t_axs[j].plot(
+                            np.arange(0, error_chunk.shape[0]),
+                            error_chunk[:, j],
+                            color="orange",
+                            linestyle="--",
+                            alpha=0.7,
+                            label=f"error Step {self.denoise_step_counter}",
+                        )
+
+            self.denoise_step_counter += 1
+
+            # Euler step
             x_t = x_t + dt * v_t
             time += dt
+
+        # Save visualization of x_t denoise steps (only if using internal figures)
+        if not use_provided_axes and self.viz_fig is not None:
+            plt.figure(self.viz_fig.number)
+
+            xt_name = "pi0_pytorch_x_t_denoise_steps.png"
+            v_name = "pi0_pytorch_v_denoise_steps.png"
+
+            if self.rtc_processor.rtc_config.enabled and prev_chunk_left_over is not None:
+                xt_name = "pi0_pytorch_x_t_with_rtc_denoise_steps.png"
+                v_name = "pi0_pytorch_v_with_rtc_denoise_steps.png"
+
+                plot_waypoints(
+                    self.viz_axs, prev_chunk_left_over, start_from=0, color="red", label="Ground truth"
+                )
+
+            plt.savefig(xt_name)
+            plt.close(self.viz_fig)
+
+            # Reset for next inference
+            self.viz_fig = None
+            self.viz_axs = None
+            self.denoise_step_counter = 0
+
+            plt.figure(self.viz_v_fig.number)
+            plt.savefig(v_name)
+            plt.close(self.viz_v_fig)
+
+            self.viz_v_fig = None
+            self.viz_v_axs = None
+
+        # Plot ground truth on provided axes if available
+        if use_provided_axes and prev_chunk_left_over is not None and self.rtc_processor.rtc_config.enabled:
+            plot_waypoints(
+                viz_xt_axs, prev_chunk_left_over, start_from=0, color="red", label="Ground truth"
+            )
+            # Also plot ground truth on x1_t axes if provided
+            if viz_x1t_axs is not None:
+                plot_waypoints(
+                    viz_x1t_axs, prev_chunk_left_over, start_from=0, color="red", label="Ground truth"
+                )
+
+        # Reset counter when using provided axes (for next call)
+        if use_provided_axes:
+            self.denoise_step_counter = 0
+
         return x_t
 
     def denoise_step(
@@ -426,7 +652,7 @@ class PI0Pytorch(nn.Module):
         x_t,
         timestep,
     ):
-        """Apply one denoising step of the noise `x_t` at a given timestep."""
+        """Apply one base denoising step without RTC guidance."""
         suffix_embs, suffix_pad_masks, suffix_att_masks, adarms_cond = self.embed_suffix(state, x_t, timestep)
 
         suffix_len = suffix_pad_masks.shape[1]
