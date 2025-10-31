@@ -21,6 +21,7 @@ class RTCConfig:
 
     # Infrastructure
     enabled: bool = True
+    debug: bool = False  # Enable debugging and detailed tracking of RTC parameters
 
     # Core RTC settings
     # Todo change to exp

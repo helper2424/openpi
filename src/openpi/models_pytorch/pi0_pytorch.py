@@ -11,7 +11,7 @@ import torch.nn.functional as F  # noqa: N812
 import openpi.models.gemma as _gemma
 from openpi.models_pytorch.gemma_pytorch import PaliGemmaWithExpertModel
 import openpi.models_pytorch.preprocessing_pytorch as _preprocessing
-from openpi.models_pytorch.modeling_rtc import RTCProcessor
+from openpi.models_pytorch.rtc import RTCProcessor, RTCTracker
 from openpi.policies.rtc_processor import RTCConfig
 
 
@@ -438,7 +438,7 @@ class PI0Pytorch(nn.Module):
         return F.mse_loss(u_t, v_t, reduction="none")
 
     @torch.no_grad()
-    def sample_actions(self, device, observation, noise=None, num_steps=10, prev_chunk_left_over=None, inference_delay=0, **kwargs) -> tuple[Tensor, dict]:
+    def sample_actions(self, device, observation, noise=None, num_steps=10, prev_chunk_left_over=None, inference_delay=0, **kwargs) -> Tensor:
         """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)
 
         Args:
@@ -454,7 +454,7 @@ class PI0Pytorch(nn.Module):
                          When RTC is enabled, plots both x1_t (solid line) and error (orange dashed line)
 
         Returns:
-            Tuple of (actions, tracking_history) where tracking_history contains RTC debugging info
+            Tensor: Predicted actions. RTC tracking history can be accessed via self.rtc_processor.tracker.get_tracking_history()
         """
         bsize = observation.state.shape[0]
 
@@ -502,6 +502,9 @@ class PI0Pytorch(nn.Module):
 
         dt = -1.0 / num_steps
         dt = torch.tensor(dt, dtype=torch.float32, device=device)
+
+        # Reset tracker for new inference run
+        self.rtc_processor.tracker.reset()
 
         x_t = noise
         time = torch.tensor(1.0, dtype=torch.float32, device=device)

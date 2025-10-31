@@ -198,7 +198,8 @@ class RTCDatasetEvaluator:
             execution_horizon=self.cfg.execution_horizon
         )
         actions_no_rtc = result_no_rtc["actions"]
-        tracking_no_rtc = result_no_rtc.get("tracking_history", None)
+        # Access tracking data directly from the tracker
+        tracking_no_rtc = self.policy_without_rtc._model.rtc_processor.tracker.get_tracking_history()
 
         # Free the non-RTC policy to save GPU memory
         self._free_policy(which="without_rtc")
@@ -232,25 +233,24 @@ class RTCDatasetEvaluator:
 
         logging.info(f"result_rtc keys: {list(result_rtc.keys())}")
         logging.info(f"result_rtc['actions'] shape: {result_rtc['actions'].shape}")
-        if 'tracking_history' in result_rtc:
-            tracking_rtc = result_rtc['tracking_history']
-            if tracking_rtc is not None:
-                logging.info(f"Tracking history keys: {list(tracking_rtc.keys())}")
-                if 'weights' in tracking_rtc:
-                    weights = np.array(tracking_rtc['weights'])
-                    logging.info(f"Weights shape: {weights.shape}")
-                    logging.info(f"First timestep weights: {weights[0] if weights.shape[0] > 0 else 'empty'}")
-                    logging.info(f"Weights stats - min: {np.min(weights)}, max: {np.max(weights)}, mean: {np.mean(weights)}")
-                    logging.info(f"Non-zero weights count: {np.sum(weights > 0)}")
-                if 'guidance_weight' in tracking_rtc:
-                    gw = np.array(tracking_rtc['guidance_weight'])
-                    logging.info(f"Guidance weights: min={np.min(gw)}, max={np.max(gw)}, mean={np.mean(gw)}")
-            else:
-                logging.info("tracking_history is None")
-        else:
-            logging.info("No 'tracking_history' key in result_rtc")
+
         actions_rtc = result_rtc["actions"]
-        tracking_rtc = result_rtc.get("tracking_history", None)
+        # Access tracking data directly from the tracker
+        tracking_rtc = self.policy_with_rtc._model.rtc_processor.tracker.get_tracking_history()
+
+        if tracking_rtc is not None:
+            logging.info(f"Tracking history keys: {list(tracking_rtc.keys())}")
+            if 'weights' in tracking_rtc:
+                weights = np.array(tracking_rtc['weights'])
+                logging.info(f"Weights shape: {weights.shape}")
+                logging.info(f"First timestep weights: {weights[0] if weights.shape[0] > 0 else 'empty'}")
+                logging.info(f"Weights stats - min: {np.min(weights)}, max: {np.max(weights)}, mean: {np.mean(weights)}")
+                logging.info(f"Non-zero weights count: {np.sum(weights > 0)}")
+            if 'guidance_weight' in tracking_rtc:
+                gw = np.array(tracking_rtc['guidance_weight'])
+                logging.info(f"Guidance weights: min={np.min(gw)}, max={np.max(gw)}, mean={np.mean(gw)}")
+        else:
+            logging.info("tracking_history is None")
 
         # ========== Create side-by-side visualization ==========
         # Use min of 6 and model's action_dim for plots
