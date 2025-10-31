@@ -90,37 +90,15 @@ class Policy(BasePolicy):
         observation = _model.Observation.from_dict(inputs)
         start_time = time.monotonic()
 
-        # Call sample_actions - it may return a tuple (actions, tracking_data)
-        sample_result = self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs, **kwargs)
-
-        # Debug logging
-        logging.info(f"sample_result type: {type(sample_result)}")
-        if isinstance(sample_result, tuple):
-            logging.info(f"sample_result is tuple with {len(sample_result)} elements")
-            if len(sample_result) == 2:
-                logging.info(f"sample_result[1] (tracking) type: {type(sample_result[1])}")
-                if sample_result[1] is not None:
-                    if isinstance(sample_result[1], dict):
-                        logging.info(f"Tracking keys: {list(sample_result[1].keys())}")
-
-        # Handle both single return value and tuple
-        if isinstance(sample_result, tuple) and len(sample_result) == 2:
-            actions, tracking_history = sample_result
-            outputs = {
-                "state": inputs["state"],
-                "actions": actions,
-                "tracking_history": tracking_history,  # Store the tracking history
-            }
-        else:
-            outputs = {
-                "state": inputs["state"],
-                "actions": sample_result,
-            }
+        # Call sample_actions with additional kwargs
+        actions = self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs, **kwargs)
 
         model_time = time.monotonic() - start_time
 
-        # Extract tracking_history if present before transforming outputs
-        tracking_history = outputs.pop("tracking_history", None)
+        outputs = {
+            "state": inputs["state"],
+            "actions": actions,
+        }
 
         if self._is_pytorch_model:
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
@@ -128,14 +106,6 @@ class Policy(BasePolicy):
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
 
         outputs = self._output_transform(outputs)
-
-        # Add tracking_history back AFTER output_transform (which might remove unknown keys)
-        if tracking_history is not None:
-            # Convert JAX arrays to numpy for tracking history
-            if not self._is_pytorch_model:
-                tracking_history = jax.tree.map(lambda x: np.asarray(x) if hasattr(x, 'shape') else x, tracking_history)
-            outputs["tracking_history"] = tracking_history
-            logging.info(f"Added tracking_history to outputs with keys: {list(tracking_history.keys()) if isinstance(tracking_history, dict) else 'not a dict'}")
 
         outputs["policy_timing"] = {
             "infer_ms": model_time * 1000,
