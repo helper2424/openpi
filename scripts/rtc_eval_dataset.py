@@ -572,22 +572,10 @@ class Args:
 def main(args: Args):
     """Main entry point for RTC dataset evaluation."""
     # Set random seed for reproducibility
-    rng_key = set_seed(args.seed)
-
-    # Ensure RTC is enabled when config is provided
-    # tyro may not preserve the default enabled=True when parsing nested dataclasses
-    if args.rtc_config is not None:
-        args.rtc_config = replace(args.rtc_config, enabled=True)
+    _ = set_seed(args.seed)
 
     logging.info("=" * 80)
-    logging.info("Pi0 Dataset Evaluation with JAX")
-    logging.info("=" * 80)
-    logging.info(f"Training config: {args.train_config_name}")
-    logging.info(f"Checkpoint: {args.checkpoint_path}")
-    logging.info(f"Dataset: {args.dataset_repo_id}")
-    logging.info(f"Action horizon: {args.action_horizon}")
-    logging.info(f"Seed: {args.seed}")
-    logging.info(f"RTC config: {args.rtc_config}")
+    logging.info(f"Pi0 Dataset Evaluation with config {args}")
     logging.info("=" * 80)
 
     evaluator = RTCDatasetEvaluator(args)
