@@ -65,55 +65,6 @@ class RTCProcessor:
         """
         return self.rtc_config.enabled
 
-        import os
-
-        os.makedirs(self.viz_output_dir, exist_ok=True)
-
-        # Visualize the forward graph leading to the error term
-        try:
-            dot_forward = make_dot(
-                err.mean(),
-                params={
-                    "x_t": x_t,
-                    "v_t": v_t,
-                    "x1_t": x1_t,
-                    "prev_chunk": prev_chunk,
-                    "weights": weights,
-                },
-                show_attrs=True,
-                show_saved=True,
-            )
-            dot_forward.format = "png"
-            forward_path = os.path.join(
-                self.viz_output_dir, f"rtc_correction_forward_graph_{self._viz_counter}"
-            )
-            dot_forward.render(forward_path, cleanup=True)
-            logger.info(f"Forward graph saved to {forward_path}.png")
-        except Exception as e:
-            logger.warning(f"Failed to create forward graph: {e}")
-
-        # Visualize the correction gradient itself
-        try:
-            dot_correction = make_dot(
-                correction.mean(),
-                params={
-                    "x_t": x_t,
-                    "correction": correction,
-                },
-                show_attrs=True,
-                show_saved=True,
-            )
-            dot_correction.format = "png"
-            correction_path = os.path.join(
-                self.viz_output_dir, f"rtc_correction_gradient_graph_{self._viz_counter}"
-            )
-            dot_correction.render(correction_path, cleanup=True)
-            logger.info(f"Correction gradient graph saved to {correction_path}.png")
-        except Exception as e:
-            logger.warning(f"Failed to create correction gradient graph: {e}")
-
-        self._viz_counter += 1
-
     def denoise_step(
         self,
         x_t,
