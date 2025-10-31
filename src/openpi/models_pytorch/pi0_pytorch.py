@@ -421,26 +421,25 @@ class PI0Pytorch(nn.Module):
             use_cache=True,
         )
 
-        if self.rtc_processor.rtc_enabled():
-            prev_chunk_left_over = kwargs.pop("prev_chunk_left_over", None)
-            inference_delay = kwargs.pop("inference_delay", 0)
-            execution_horizon = kwargs.get("execution_horizon", self.rtc_processor.rtc_config.execution_horizon)
+        # Extract RTC parameters from kwargs
+        prev_chunk_left_over = kwargs.pop("prev_chunk_left_over", None)
+        inference_delay = kwargs.pop("inference_delay", 0)
 
-            # Pad prev_chunk_left_over to match action_horizon and action_dim if provided
-            if prev_chunk_left_over is not None:
-                # Convert to tensor if it's a numpy array
-                if isinstance(prev_chunk_left_over, np.ndarray):
-                    prev_chunk_left_over = torch.from_numpy(prev_chunk_left_over).to(device)
+        # Pad prev_chunk_left_over to match action_horizon and action_dim if provided
+        if prev_chunk_left_over is not None:
+            # Convert to tensor if it's a numpy array
+            if isinstance(prev_chunk_left_over, np.ndarray):
+                prev_chunk_left_over = torch.from_numpy(prev_chunk_left_over).to(device)
 
-                # prev_chunk_left_over shape: (batch, time, action_dim)
-                time_pad = self.config.action_horizon - prev_chunk_left_over.shape[1]
-                action_dim_pad = self.config.action_dim - prev_chunk_left_over.shape[2]
-                if time_pad > 0 or action_dim_pad > 0:
-                    prev_chunk_left_over = torch.nn.functional.pad(
-                        prev_chunk_left_over,
-                        (0, action_dim_pad, 0, time_pad, 0, 0),  # (left, right) for each dim from right to left
-                    )
-                    logging.info(f"Padded prev_chunk_left_over to shape: {prev_chunk_left_over.shape}")
+            # prev_chunk_left_over shape: (batch, time, action_dim)
+            time_pad = self.config.action_horizon - prev_chunk_left_over.shape[1]
+            action_dim_pad = self.config.action_dim - prev_chunk_left_over.shape[2]
+            if time_pad > 0 or action_dim_pad > 0:
+                prev_chunk_left_over = torch.nn.functional.pad(
+                    prev_chunk_left_over,
+                    (0, action_dim_pad, 0, time_pad, 0, 0),  # (left, right) for each dim from right to left
+                )
+                logging.info(f"Padded prev_chunk_left_over to shape: {prev_chunk_left_over.shape}")
 
         dt = -1.0 / num_steps
         dt = torch.tensor(dt, dtype=torch.float32, device=device)
@@ -464,6 +463,8 @@ class PI0Pytorch(nn.Module):
             )
 
             if self.rtc_processor.rtc_config.enabled and prev_chunk_left_over is not None:
+                execution_horizon = kwargs.get("execution_horizon", self.rtc_processor.rtc_config.execution_horizon)
+
                 v_t = self.rtc_processor.denoise_step(
                     x_t=x_t,
                     prev_chunk_left_over=prev_chunk_left_over,
