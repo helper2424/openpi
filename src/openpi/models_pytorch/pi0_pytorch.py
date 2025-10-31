@@ -606,16 +606,18 @@ class PI0Pytorch(nn.Module):
         if not use_provided_axes and self.viz_fig is not None:
             plt.figure(self.viz_fig.number)
 
-            xt_name = "pi0_pytorch_x_t_denoise_steps.png"
-            v_name = "pi0_pytorch_v_denoise_steps.png"
-
-            if self.rtc_processor.rtc_config.enabled and prev_chunk_left_over is not None:
+            # Determine filename based on RTC status
+            rtc_enabled = self.rtc_processor.rtc_config.enabled
+            if rtc_enabled and prev_chunk_left_over is not None:
                 xt_name = "pi0_pytorch_x_t_with_rtc_denoise_steps.png"
                 v_name = "pi0_pytorch_v_with_rtc_denoise_steps.png"
-
+                # Plot ground truth when RTC is enabled
                 plot_waypoints(
                     self.viz_axs, prev_chunk_left_over, start_from=0, color="red", label="Ground truth"
                 )
+            else:
+                xt_name = "pi0_pytorch_x_t_no_rtc_denoise_steps.png"
+                v_name = "pi0_pytorch_v_no_rtc_denoise_steps.png"
 
             plt.savefig(xt_name)
             plt.close(self.viz_fig)
@@ -633,15 +635,16 @@ class PI0Pytorch(nn.Module):
             self.viz_v_axs = None
 
         # Plot ground truth on provided axes if available
-        if use_provided_axes and prev_chunk_left_over is not None and self.rtc_processor.rtc_config.enabled:
-            plot_waypoints(
-                viz_xt_axs, prev_chunk_left_over, start_from=0, color="red", label="Ground truth"
-            )
-            # Also plot ground truth on x1_t axes if provided
-            if viz_x1t_axs is not None:
+        if use_provided_axes and prev_chunk_left_over is not None:
+            if self.rtc_processor.rtc_config.enabled:
                 plot_waypoints(
-                    viz_x1t_axs, prev_chunk_left_over, start_from=0, color="red", label="Ground truth"
+                    viz_xt_axs, prev_chunk_left_over, start_from=0, color="red", label="Ground truth"
                 )
+                # Also plot ground truth on x1_t axes if provided
+                if viz_x1t_axs is not None:
+                    plot_waypoints(
+                        viz_x1t_axs, prev_chunk_left_over, start_from=0, color="red", label="Ground truth"
+                    )
 
         # Reset counter when using provided axes (for next call)
         if use_provided_axes:
