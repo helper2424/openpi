@@ -486,6 +486,10 @@ class PI0Pytorch(nn.Module):
 
         # Pad prev_chunk_left_over to match action_horizon and action_dim if provided
         if prev_chunk_left_over is not None:
+            # Convert to tensor if it's a numpy array
+            if isinstance(prev_chunk_left_over, np.ndarray):
+                prev_chunk_left_over = torch.from_numpy(prev_chunk_left_over).to(device)
+
             # prev_chunk_left_over shape: (batch, time, action_dim)
             time_pad = self.config.action_horizon - prev_chunk_left_over.shape[1]
             action_dim_pad = self.config.action_dim - prev_chunk_left_over.shape[2]
