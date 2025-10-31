@@ -421,7 +421,7 @@ class PI0Pytorch(nn.Module):
             use_cache=True,
         )
 
-        if self.rtc_processor.enabled():
+        if self.rtc_processor.rtc_enabled():
             prev_chunk_left_over = kwargs.pop("prev_chunk_left_over", None)
             inference_delay = kwargs.pop("inference_delay", 0)
             execution_horizon = kwargs.get("execution_horizon", self.rtc_processor.rtc_config.execution_horizon)
@@ -450,7 +450,6 @@ class PI0Pytorch(nn.Module):
 
         x_t = noise
         time = torch.tensor(1.0, dtype=torch.float32, device=device)
-
         while time >= -dt / 2:
             expanded_time = time.expand(bsize)
 
@@ -476,7 +475,7 @@ class PI0Pytorch(nn.Module):
             else:
                 v_t = denoise_step_partial_call(x_t)
 
-            # Euler step
+            # Euler step - use new tensor assignment instead of in-place operation
             x_t = x_t + dt * v_t
             time += dt
         return x_t
