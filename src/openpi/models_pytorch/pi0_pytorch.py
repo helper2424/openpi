@@ -397,26 +397,8 @@ class PI0Pytorch(nn.Module):
 
     @torch.no_grad()
     def sample_actions(self, device, observation, noise=None, num_steps=10, **kwargs) -> Tensor:
-        """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)
-
-        Args:
-            device: Device to run inference on
-            observation: Current observation
-            noise: Optional noise to use for diffusion sampling
-            num_steps: Number of diffusion steps
-            **kwargs: Additional arguments including:
-                prev_chunk_left_over: Unexecuted actions from previous chunk for RTC guidance
-                inference_delay: Number of steps to delay before using RTC guidance (default: 0)
-                execution_horizon: Execution horizon for RTC (uses config default if not specified)
-
-        Returns:
-            Tensor: Predicted actions. RTC tracking history can be accessed via self.rtc_processor.tracker.get_tracking_history()
-        """
         bsize = observation.state.shape[0]
 
-        # Extract RTC parameters from kwargs
-        prev_chunk_left_over = kwargs.pop("prev_chunk_left_over", None)
-        inference_delay = kwargs.pop("inference_delay", 0)
         if noise is None:
             actions_shape = (bsize, self.config.action_horizon, self.config.action_dim)
             noise = self.sample_noise(actions_shape, device)
@@ -439,21 +421,26 @@ class PI0Pytorch(nn.Module):
             use_cache=True,
         )
 
-        # Pad prev_chunk_left_over to match action_horizon and action_dim if provided
-        if prev_chunk_left_over is not None:
-            # Convert to tensor if it's a numpy array
-            if isinstance(prev_chunk_left_over, np.ndarray):
-                prev_chunk_left_over = torch.from_numpy(prev_chunk_left_over).to(device)
+        if self.rtc_processor.enabled():
+            prev_chunk_left_over = kwargs.pop("prev_chunk_left_over", None)
+            inference_delay = kwargs.pop("inference_delay", 0)
+            execution_horizon = kwargs.get("execution_horizon", self.rtc_processor.rtc_config.execution_horizon)
 
-            # prev_chunk_left_over shape: (batch, time, action_dim)
-            time_pad = self.config.action_horizon - prev_chunk_left_over.shape[1]
-            action_dim_pad = self.config.action_dim - prev_chunk_left_over.shape[2]
-            if time_pad > 0 or action_dim_pad > 0:
-                prev_chunk_left_over = torch.nn.functional.pad(
-                    prev_chunk_left_over,
-                    (0, action_dim_pad, 0, time_pad, 0, 0),  # (left, right) for each dim from right to left
-                )
-                logging.info(f"Padded prev_chunk_left_over to shape: {prev_chunk_left_over.shape}")
+            # Pad prev_chunk_left_over to match action_horizon and action_dim if provided
+            if prev_chunk_left_over is not None:
+                # Convert to tensor if it's a numpy array
+                if isinstance(prev_chunk_left_over, np.ndarray):
+                    prev_chunk_left_over = torch.from_numpy(prev_chunk_left_over).to(device)
+
+                # prev_chunk_left_over shape: (batch, time, action_dim)
+                time_pad = self.config.action_horizon - prev_chunk_left_over.shape[1]
+                action_dim_pad = self.config.action_dim - prev_chunk_left_over.shape[2]
+                if time_pad > 0 or action_dim_pad > 0:
+                    prev_chunk_left_over = torch.nn.functional.pad(
+                        prev_chunk_left_over,
+                        (0, action_dim_pad, 0, time_pad, 0, 0),  # (left, right) for each dim from right to left
+                    )
+                    logging.info(f"Padded prev_chunk_left_over to shape: {prev_chunk_left_over.shape}")
 
         dt = -1.0 / num_steps
         dt = torch.tensor(dt, dtype=torch.float32, device=device)
@@ -478,8 +465,6 @@ class PI0Pytorch(nn.Module):
             )
 
             if self.rtc_processor.rtc_config.enabled and prev_chunk_left_over is not None:
-                execution_horizon = kwargs.get("execution_horizon", self.rtc_processor.rtc_config.execution_horizon)
-
                 v_t = self.rtc_processor.denoise_step(
                     x_t=x_t,
                     prev_chunk_left_over=prev_chunk_left_over,
@@ -494,7 +479,6 @@ class PI0Pytorch(nn.Module):
             # Euler step
             x_t = x_t + dt * v_t
             time += dt
-
         return x_t
 
     def denoise_step(
@@ -505,7 +489,7 @@ class PI0Pytorch(nn.Module):
         x_t,
         timestep,
     ):
-        """Apply one base denoising step without RTC guidance."""
+        """Apply one denoising step of the noise `x_t` at a given timestep."""
         suffix_embs, suffix_pad_masks, suffix_att_masks, adarms_cond = self.embed_suffix(state, x_t, timestep)
 
         suffix_len = suffix_pad_masks.shape[1]
