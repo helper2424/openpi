@@ -38,34 +38,15 @@ class RTCDatasetEvaluator:
         self.cfg = cfg
 
         # Load the training config to get model configuration
-        logging.info(f"Loading policy from {cfg.checkpoint_path}")
+        logging.info(f"Loading checkpoint from {cfg.checkpoint_path}")
         self.train_cfg = train_config.get_config(cfg.train_config_name)
 
-        # Create TWO policies: one with RTC and one without
-        # This is necessary because JAX's JIT compilation freezes the model state
-
-        # Policy WITH RTC
-        logging.info("Creating policy WITH RTC...")
-        self.policy_with_rtc = policy_config.create_trained_policy(
-            train_config=self.train_cfg,
-            checkpoint_dir=pathlib.Path(cfg.checkpoint_path),
-            sample_kwargs=cfg.sample_kwargs or {},
-        )
-        self.policy_with_rtc._model.init_rtc_processor(cfg.rtc_config)
-
-        # Policy WITHOUT RTC (disable by passing a config with enabled=False)
-        logging.info("Creating policy WITHOUT RTC...")
-        self.policy_without_rtc = policy_config.create_trained_policy(
-            train_config=self.train_cfg,
-            checkpoint_dir=pathlib.Path(cfg.checkpoint_path),
-            sample_kwargs=cfg.sample_kwargs or {},
-        )
-        # Initialize with disabled RTC
-        disabled_rtc_config = replace(cfg.rtc_config, enabled=False)
-        self.policy_without_rtc._model.init_rtc_processor(disabled_rtc_config)
-
-        logging.info(f"Policies loaded successfully")
         logging.info(f"Model config: {self.train_cfg.model}")
+
+        # Don't load policies yet - we'll load them one at a time during evaluation
+        # to avoid GPU memory issues
+        self.policy_with_rtc = None
+        self.policy_without_rtc = None
 
         # Create raw dataset without transforms for inference
         # We'll use policy.infer() which applies transforms itself
@@ -84,6 +65,58 @@ class RTCDatasetEvaluator:
         )
 
         logging.info(f"Dataloader created successfully")
+
+    def _load_policy_with_rtc(self):
+        """Load policy with RTC enabled."""
+        import torch
+        import gc
+
+        logging.info("Creating policy WITH RTC...")
+        self.policy_with_rtc = policy_config.create_trained_policy(
+            train_config=self.train_cfg,
+            checkpoint_dir=pathlib.Path(self.cfg.checkpoint_path),
+            sample_kwargs=self.cfg.sample_kwargs or {},
+        )
+        self.policy_with_rtc._model.init_rtc_processor(self.cfg.rtc_config)
+        logging.info("Policy WITH RTC loaded successfully")
+
+    def _load_policy_without_rtc(self):
+        """Load policy without RTC."""
+        import torch
+        import gc
+
+        logging.info("Creating policy WITHOUT RTC...")
+        self.policy_without_rtc = policy_config.create_trained_policy(
+            train_config=self.train_cfg,
+            checkpoint_dir=pathlib.Path(self.cfg.checkpoint_path),
+            sample_kwargs=self.cfg.sample_kwargs or {},
+        )
+        # Initialize with disabled RTC
+        disabled_rtc_config = replace(self.cfg.rtc_config, enabled=False)
+        self.policy_without_rtc._model.init_rtc_processor(disabled_rtc_config)
+        logging.info("Policy WITHOUT RTC loaded successfully")
+
+    def _free_policy(self, which="both"):
+        """Free GPU memory by deleting policy."""
+        import torch
+        import gc
+
+        if which in ("with_rtc", "both") and self.policy_with_rtc is not None:
+            del self.policy_with_rtc
+            self.policy_with_rtc = None
+            logging.info("Freed policy WITH RTC")
+
+        if which in ("without_rtc", "both") and self.policy_without_rtc is not None:
+            del self.policy_without_rtc
+            self.policy_without_rtc = None
+            logging.info("Freed policy WITHOUT RTC")
+
+        # Force garbage collection and clear CUDA cache
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+            torch.cuda.synchronize()
+            logging.info("Cleared CUDA cache")
 
     def run_evaluation(self) -> dict:
         """Run full evaluation on dataset.
@@ -145,6 +178,9 @@ class RTCDatasetEvaluator:
         logging.info("Running inference WITHOUT RTC")
         logging.info("=" * 80)
 
+        # Load policy without RTC
+        self._load_policy_without_rtc()
+
         # Use the policy without RTC
         rtc_processor_no_rtc = self.policy_without_rtc._model.rtc_processor
         if rtc_processor_no_rtc:
@@ -163,10 +199,16 @@ class RTCDatasetEvaluator:
         actions_no_rtc = result_no_rtc["actions"]
         tracking_no_rtc = result_no_rtc.get("tracking_history", None)
 
+        # Free the non-RTC policy to save GPU memory
+        self._free_policy(which="without_rtc")
+
         # ========== Run inference WITH RTC ==========
         logging.info("=" * 80)
         logging.info("Running inference WITH RTC")
         logging.info("=" * 80)
+
+        # Load policy with RTC
+        self._load_policy_with_rtc()
 
         # Use the policy with RTC
         rtc_processor_with_rtc = self.policy_with_rtc._model.rtc_processor
