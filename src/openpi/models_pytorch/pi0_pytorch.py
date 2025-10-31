@@ -182,7 +182,7 @@ class PI0Pytorch(nn.Module):
             # Create default RTC config similar to JAX version
             rtc_config = RTCConfig()
 
-        self.rtc_processor = RTCProcessor(rtc_config=rtc_config, verbose=False)
+        self.rtc_processor = RTCProcessor(rtc_config=rtc_config)
         logging.info(f"Initialized RTC processor: enabled={rtc_config.enabled}, "
                     f"execution_horizon={rtc_config.execution_horizon}, "
                     f"max_guidance_weight={rtc_config.max_guidance_weight}, "
