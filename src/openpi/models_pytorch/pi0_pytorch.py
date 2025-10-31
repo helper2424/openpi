@@ -438,7 +438,7 @@ class PI0Pytorch(nn.Module):
         return F.mse_loss(u_t, v_t, reduction="none")
 
     @torch.no_grad()
-    def sample_actions(self, device, observation, noise=None, num_steps=10, prev_chunk_left_over=None, inference_delay=0, **kwargs) -> Tensor:
+    def sample_actions(self, device, observation, noise=None, num_steps=10, **kwargs) -> Tensor:
         """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)
 
         Args:
@@ -446,17 +446,23 @@ class PI0Pytorch(nn.Module):
             observation: Current observation
             noise: Optional noise to use for diffusion sampling
             num_steps: Number of diffusion steps
-            prev_chunk_left_over: Unexecuted actions from previous chunk for RTC guidance
-            inference_delay: Number of steps to delay before using RTC guidance
-            viz_xt_axs: Optional matplotlib axes for plotting x_t trajectories (array of 6 axes)
-            viz_vt_axs: Optional matplotlib axes for plotting v_t trajectories (array of 6 axes)
-            viz_x1t_axs: Optional matplotlib axes for plotting x1_t predicted state and error (array of 6 axes)
-                         When RTC is enabled, plots both x1_t (solid line) and error (orange dashed line)
+            **kwargs: Additional arguments including:
+                prev_chunk_left_over: Unexecuted actions from previous chunk for RTC guidance
+                inference_delay: Number of steps to delay before using RTC guidance (default: 0)
+                execution_horizon: Execution horizon for RTC (uses config default if not specified)
+                viz_xt_axs: Optional matplotlib axes for plotting x_t trajectories (array of 6 axes)
+                viz_vt_axs: Optional matplotlib axes for plotting v_t trajectories (array of 6 axes)
+                viz_x1t_axs: Optional matplotlib axes for plotting x1_t predicted state and error (array of 6 axes)
+                             When RTC is enabled, plots both x1_t (solid line) and error (orange dashed line)
 
         Returns:
             Tensor: Predicted actions. RTC tracking history can be accessed via self.rtc_processor.tracker.get_tracking_history()
         """
         bsize = observation.state.shape[0]
+
+        # Extract RTC parameters from kwargs
+        prev_chunk_left_over = kwargs.pop("prev_chunk_left_over", None)
+        inference_delay = kwargs.pop("inference_delay", 0)
 
         # Extract visualization axes from kwargs
         viz_xt_axs = kwargs.pop("viz_xt_axs", None)
