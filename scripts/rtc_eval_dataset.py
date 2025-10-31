@@ -53,16 +53,16 @@ class RTCDatasetEvaluator:
         )
         self.policy_with_rtc._model.init_rtc_processor(cfg.rtc_config)
 
-        # # Policy WITHOUT RTC (disable by passing a config with enabled=False)
-        # logging.info("Creating policy WITHOUT RTC...")
-        # self.policy_without_rtc = policy_config.create_trained_policy(
-        #     train_config=self.train_cfg,
-        #     checkpoint_dir=pathlib.Path(cfg.checkpoint_path),
-        #     sample_kwargs=cfg.sample_kwargs or {},
-        # )
+        # Policy WITHOUT RTC (disable by passing a config with enabled=False)
+        logging.info("Creating policy WITHOUT RTC...")
+        self.policy_without_rtc = policy_config.create_trained_policy(
+            train_config=self.train_cfg,
+            checkpoint_dir=pathlib.Path(cfg.checkpoint_path),
+            sample_kwargs=cfg.sample_kwargs or {},
+        )
         # Initialize with disabled RTC
-        # disabled_rtc_config = replace(cfg.rtc_config, enabled=False)
-        # self.policy_without_rtc._model.init_rtc_processor(disabled_rtc_config)
+        disabled_rtc_config = replace(cfg.rtc_config, enabled=False)
+        self.policy_without_rtc._model.init_rtc_processor(disabled_rtc_config)
 
         logging.info(f"Policies loaded successfully")
         logging.info(f"Model config: {self.train_cfg.model}")
@@ -141,27 +141,27 @@ class RTCDatasetEvaluator:
         noise = np.random.randn(model_action_horizon, model_action_dim).astype(np.float32)
 
         # ========== Run inference WITHOUT RTC ==========
-        # logging.info("=" * 80)
-        # logging.info("Running inference WITHOUT RTC")
-        # logging.info("=" * 80)
+        logging.info("=" * 80)
+        logging.info("Running inference WITHOUT RTC")
+        logging.info("=" * 80)
 
-        # # Use the policy without RTC
-        # rtc_processor_no_rtc = self.policy_without_rtc._model.rtc_processor
-        # if rtc_processor_no_rtc:
-        #     logging.info(f"Policy WITHOUT RTC - rtc_enabled: {rtc_processor_no_rtc.rtc_enabled()}")
-        #     logging.info(f"Policy WITHOUT RTC - config: {rtc_processor_no_rtc.rtc_config}")
-        # else:
-        #     logging.info("Policy WITHOUT RTC - rtc_processor is None")
+        # Use the policy without RTC
+        rtc_processor_no_rtc = self.policy_without_rtc._model.rtc_processor
+        if rtc_processor_no_rtc:
+            logging.info(f"Policy WITHOUT RTC - rtc_enabled: {rtc_processor_no_rtc.rtc_enabled()}")
+            logging.info(f"Policy WITHOUT RTC - config: {rtc_processor_no_rtc.rtc_config}")
+        else:
+            logging.info("Policy WITHOUT RTC - rtc_processor is None")
 
-        # result_no_rtc = self.policy_without_rtc.infer(
-        #     obs,
-        #     noise=noise,
-        #     inference_delay=self.cfg.inference_delay,
-        #     prev_chunk_left_over=prev_chunk_left_over,
-        #     execution_horizon=self.cfg.execution_horizon
-        # )
-        # actions_no_rtc = result_no_rtc["actions"]
-        # tracking_no_rtc = result_no_rtc.get("tracking_history", None)
+        result_no_rtc = self.policy_without_rtc.infer(
+            obs,
+            noise=noise,
+            inference_delay=self.cfg.inference_delay,
+            prev_chunk_left_over=prev_chunk_left_over,
+            execution_horizon=self.cfg.execution_horizon
+        )
+        actions_no_rtc = result_no_rtc["actions"]
+        tracking_no_rtc = result_no_rtc.get("tracking_history", None)
 
         # ========== Run inference WITH RTC ==========
         logging.info("=" * 80)
@@ -222,14 +222,14 @@ class RTCDatasetEvaluator:
 
         # Remove batch dimension for plotting
         prev_chunk_to_plot = prev_chunk_left_over[0] if prev_chunk_left_over.ndim == 3 else prev_chunk_left_over
-        # actions_no_rtc_plot = actions_no_rtc[0] if actions_no_rtc.ndim == 3 else actions_no_rtc
+        actions_no_rtc_plot = actions_no_rtc[0] if actions_no_rtc.ndim == 3 else actions_no_rtc
         actions_rtc_plot = actions_rtc[0] if actions_rtc.ndim == 3 else actions_rtc
 
-        # # Plot NO RTC (left column)
-        # self.axs = axes[:, 0]
-        # axes[0, 0].set_title("Without RTC", fontsize=16, fontweight='bold')
-        # self.plot_waypoints(prev_chunk_to_plot, label="Previous Actions", color="green")
-        # self.plot_waypoints(actions_no_rtc_plot, label="Predicted Actions", color="blue")
+        # Plot NO RTC (left column)
+        self.axs = axes[:, 0]
+        axes[0, 0].set_title("Without RTC", fontsize=16, fontweight='bold')
+        self.plot_waypoints(prev_chunk_to_plot, label="Previous Actions", color="green")
+        self.plot_waypoints(actions_no_rtc_plot, label="Predicted Actions", color="blue")
 
         # Plot WITH RTC (right column)
         self.axs = axes[:, 1]
@@ -246,7 +246,7 @@ class RTCDatasetEvaluator:
         # ========== Create detailed RTC tracking visualization ==========
         if True:
             logging.info("Creating detailed RTC tracking visualization...")
-            self.visualize_rtc_tracking(tracking_rtc, None, selected_indices)
+            self.visualize_rtc_tracking(tracking_rtc, tracking_no_rtc, selected_indices)
         else:
             logging.info("No tracking data available for detailed visualization")
 
