@@ -284,7 +284,7 @@ class Pi0(_model.BaseModel):
         logger.info(f"RTC check before scan: rtc_processor={self.rtc_processor is not None}, enabled={rtc_is_enabled}")
 
         # For JAX compilation, we need to determine RTC path outside the compiled function
-        use_rtc = rtc_is_enabled
+        use_rtc = rtc_is_enabled and prev_chunk_left_over is not None
 
         def original_step_scan(carry):
             x_t, time = carry
@@ -327,7 +327,7 @@ class Pi0(_model.BaseModel):
                         v_t = original_step_scan((x_t, time))
 
                         # Remove batch dimension from outputs
-                        return (x_t - v_t * (1 - time)), v_t
+                        return (x_t + v_t * (1 - time)), v_t
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
 
@@ -345,7 +345,7 @@ class Pi0(_model.BaseModel):
                     c = jnp.nan_to_num((1 - time) / time, posinf=self.rtc_processor.rtc_config.max_guidance_weight)
                     guidance_weight = jnp.minimum(c * inv_r2, self.rtc_processor.rtc_config.max_guidance_weight)
 
-                    v_t_corrected = v_t - guidance_weight * pinv_correction
+                    v_t_corrected = v_t + guidance_weight * pinv_correction
 
                     # Return both velocity and tracking data
                     return v_t_corrected, {
