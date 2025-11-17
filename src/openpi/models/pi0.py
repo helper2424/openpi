@@ -362,6 +362,7 @@ class Pi0(_model.BaseModel):
 
                 v_t, pinv_corrected_velocity_data = pinv_corrected_velocity(x_t, prev_chunk_left_over, time)
                 
+                logger.info(f"pinv_corrected_velocity_data: {pinv_corrected_velocity_data}")
                 tracking_data["x_1"] = tracking_data["x_1"].append(pinv_corrected_velocity_data["x_1"])
                 tracking_data["v_t"] = tracking_data["v_t"].append(pinv_corrected_velocity_data["v_t"])
                 tracking_data["error"] = tracking_data["error"].append(pinv_corrected_velocity_data["error"])
@@ -369,6 +370,8 @@ class Pi0(_model.BaseModel):
                 tracking_data["guidance_weight"] = tracking_data["guidance_weight"].append(pinv_corrected_velocity_data["guidance_weight"])
                 tracking_data["pinv_correction"] = tracking_data["pinv_correction"].append(pinv_corrected_velocity_data["pinv_correction"])
                 tracking_data["time"] = tracking_data["time"].append(time)
+
+                logger.info(f"tracking_data after pinv_corrected_velocity: {tracking_data}")
 
             else:
                 logger.info("=== USING NON-RTC PATH ===")
