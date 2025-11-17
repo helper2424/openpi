@@ -259,6 +259,12 @@ class Pi0(_model.BaseModel):
         inference_delay = kwargs.get("inference_delay")
         prev_chunk_left_over = kwargs.get("prev_chunk_left_over")
 
+        rtc_is_enabled = self.rtc_processor is not None and self.rtc_processor.rtc_enabled()
+        logger.info(f"RTC check before scan: rtc_processor={self.rtc_processor is not None}, enabled={rtc_is_enabled}")
+
+        # For JAX compilation, we need to determine RTC path outside the compiled function
+        use_rtc = rtc_is_enabled and prev_chunk_left_over is not None
+
         #  Make padding for prev_chunk_left_over to match the action_horizon and action_dim
         # prev_chunk_left_over shape: (batch, time, action_dim)
         # Pad the time dimension (axis 1) to match action_horizon
@@ -279,16 +285,8 @@ class Pi0(_model.BaseModel):
         logger.info(f"action_horizon: {self.action_horizon}")
         logger.info(f"action_dim: {self.action_dim}")
 
-        # Debug: Check RTC status before entering scan
-        rtc_is_enabled = self.rtc_processor is not None and self.rtc_processor.rtc_enabled()
-        logger.info(f"RTC check before scan: rtc_processor={self.rtc_processor is not None}, enabled={rtc_is_enabled}")
-
-        # For JAX compilation, we need to determine RTC path outside the compiled function
-        use_rtc = rtc_is_enabled and prev_chunk_left_over is not None
-
-        logger.info(f"use_rtc: {use_rtc}")
-        logger.info(f"prev_chunk_left_over: {prev_chunk_left_over}")
-
+        logger.info(f"use_rtc: {use_rtc}")  
+        logger.info(f"batch_size: {batch_size}")
         def original_step_scan(carry):
             x_t, time = carry
             suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
