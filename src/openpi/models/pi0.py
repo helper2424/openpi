@@ -319,7 +319,7 @@ class Pi0(_model.BaseModel):
             return self.action_out_proj(suffix_out[:, -self.action_horizon :])
 
         def step_scan(carry):
-            x_t, time= carry
+            x_t, time, tracking_data= carry
             if use_rtc:
                 logger.info("=== USING RTC PATH ===")
                 logger.info(f"rtc_processor: {self.rtc_processor}")
@@ -359,49 +359,55 @@ class Pi0(_model.BaseModel):
                         "pinv_correction": pinv_correction,
                     }
 
-                v_t, tracking_data = pinv_corrected_velocity(x_t, prev_chunk_left_over, time)
+                v_t, pinv_corrected_velocity_data = pinv_corrected_velocity(x_t, prev_chunk_left_over, time)
+                
+                tracking_data["x_1"] = tracking_data["x_1"].append(pinv_corrected_velocity_data["x_1"])
+                tracking_data["v_t"] = tracking_data["v_t"].append(pinv_corrected_velocity_data["v_t"])
+                tracking_data["error"] = tracking_data["error"].append(pinv_corrected_velocity_data["error"])
+                tracking_data["weights"] = tracking_data["weights"].append(pinv_corrected_velocity_data["weights"])
+                tracking_data["guidance_weight"] = tracking_data["guidance_weight"].append(pinv_corrected_velocity_data["guidance_weight"])
+                tracking_data["pinv_correction"] = tracking_data["pinv_correction"].append(pinv_corrected_velocity_data["pinv_correction"])
+                tracking_data["time"] = tracking_data["time"].append(time)
 
-                # Build tracking output for scan
-                scan_output = {
-                    "x_t": x_t,
-                    "v_t": v_t,
-                    "time": time,
-                    "x_1": tracking_data["x_1"],
-                    "error": tracking_data["error"],
-                    "weights": tracking_data["weights"],
-                    "guidance_weight": tracking_data["guidance_weight"],
-                    "pinv_correction": tracking_data["pinv_correction"],
-                }
             else:
                 logger.info("=== USING NON-RTC PATH ===")
                 logger.info(f"rtc_processor: {self.rtc_processor}")
 
                 v_t = original_step_scan(carry)
 
-                # Build minimal tracking output for non-RTC case
-                # Still need to return a dict with same structure to avoid JAX tracer issues
-                # Just fill with dummy values or minimal data
-                scan_output = {
-                    "x_t": x_t,
-                    "v_t": v_t,
-                    "time": time,
-                    # Add dummy values for RTC-specific keys to maintain consistent structure
-                    "x_1": jnp.zeros_like(x_t),
-                    "error": jnp.zeros_like(x_t),
-                    "weights": jnp.zeros(self.action_horizon),
-                    "guidance_weight": jnp.zeros(()),
-                    "pinv_correction": jnp.zeros_like(x_t),
-                }
+                tracking_data["x_t"] = tracking_data["x_t"].append(x_t)
+                tracking_data["v_t"] = tracking_data["v_t"].append(v_t)
+                tracking_data["time"] = tracking_data["time"].append(time)
+                tracking_data["x_1"] = tracking_data["x_1"].append(jnp.zeros_like(x_t))
+                tracking_data["error"] = tracking_data["error"].append(jnp.zeros_like(x_t))
+                tracking_data["weights"] = tracking_data["weights"].append(jnp.zeros(self.action_horizon))
+                tracking_data["guidance_weight"] = tracking_data["guidance_weight"].append(jnp.zeros(()))
+                tracking_data["pinv_correction"] = tracking_data["pinv_correction"].append(jnp.zeros_like(x_t))
 
+            x_t = x_t - dt * v_t
+
+            tracking_data["x_t"] = tracking_data["x_t"].append(x_t)
+            
             # Return updated carry and scan output
-            return x_t - dt * v_t, time + dt, scan_output
+            return x_t, time + dt, tracking_data
 
         def cond(carry):
-            x_t, time = carry
+            x_t, time, _ = carry
             # robust to floating-point error
             return time >= -dt / 2
 
-        x_0, tracking_history = jax.lax.while_loop(cond, step_scan, (noise, 1.0, {}))
+        basic_tracking_data = {
+            "x_t": [],
+            "x_1": [],
+            "v_t": [],
+            "error": [],
+            "weights": [],
+            "guidance_weight": [],
+            "pinv_correction": [],
+            "time": [],
+        }
+
+        x_0, tracking_history = jax.lax.while_loop(cond, step_scan, (noise, 1.0, basic_tracking_data))
 
         # Always return both to avoid JAX tracer issues
         # The caller can decide whether to use the tracking data
