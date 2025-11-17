@@ -4,12 +4,54 @@ import logging
 
 import jax
 import jax.numpy as jnp
+import numpy as np
 
 class RTCAttentionSchedule(str, enum.Enum):
     ZEROS = "ZEROS"
     ONES = "ONES"
     LINEAR = "LINEAR"
     EXP = "EXP"
+
+class RTCTracker:
+    """Tracks RTC parameters across denoising steps for debugging and visualization."""
+
+    def __init__(self, enabled: bool = False):
+        """Initialize RTCTracker.
+
+        Args:
+            enabled: Whether to track RTC data. If False, all tracking operations are no-ops.
+        """
+        self.enabled = enabled
+        self._tracking_history = None
+
+    def reset(self):
+        """Reset tracker for a new inference run."""
+        self._tracking_history = None
+
+    def set_tracking_history(self, tracking_history: dict):
+        """Set tracking history from scan output.
+
+        Args:
+            tracking_history: Dictionary of JAX arrays from jax.lax.scan output
+        """
+        if not self.enabled:
+            return
+
+        # Convert JAX arrays to numpy for compatibility with visualization code
+        self._tracking_history = {
+            key: np.array(val) if val is not None else None
+            for key, val in tracking_history.items()
+        }
+
+    def get_tracking_history(self) -> dict | None:
+        """Get tracking history in a format compatible with visualization code.
+
+        Returns:
+            Dictionary with numpy arrays of tracked parameters, or None if tracking disabled.
+        """
+        if not self.enabled:
+            return None
+        return self._tracking_history
 
 @dataclasses.dataclass
 class RTCConfig:
@@ -58,6 +100,7 @@ class RTCProcessor:
             viz_output_dir (str): Directory to save gradient visualizations.
         """
         self.rtc_config = rtc_config
+        self.tracker = RTCTracker(enabled=rtc_config.debug if rtc_config else False)
 
     def rtc_enabled(self) -> bool:
         return self.rtc_config is not None and self.rtc_config.enabled
