@@ -395,7 +395,7 @@ class Pi0(_model.BaseModel):
             x_t_next = x_t + dt * v_t
 
             # Return updated carry and scan output
-            return x_t_next, scan_output
+            return x_t_next, time + dt
 
         def cond(carry):
             x_t, time = carry
