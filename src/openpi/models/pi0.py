@@ -335,6 +335,8 @@ class Pi0(_model.BaseModel):
                         inference_delay, self.rtc_processor.rtc_config.execution_horizon, self.action_horizon, self.rtc_processor.rtc_config.prefix_attention_schedule
                     )
 
+                    weights = einops.repeat(weights, "c -> b c a", b=batch_size, a=self.action_dim)
+                    
                     error = (y - x_1)
                     print(f"error shape: {error.shape}")
                     print(f"weights shape: {weights.shape}")
