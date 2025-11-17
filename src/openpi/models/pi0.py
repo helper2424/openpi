@@ -290,7 +290,7 @@ class Pi0(_model.BaseModel):
             x_t, time = carry
             print(f"x_t shape: {time}, {time.shape}")
             suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
-                observation, x_t, time
+                observation, x_t, jnp.broadcast_to(time, batch_size)
             )
             # `suffix_attn_mask` is shape (b, suffix_len, suffix_len) indicating how the suffix tokens can attend to each
             # other
