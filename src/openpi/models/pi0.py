@@ -286,6 +286,9 @@ class Pi0(_model.BaseModel):
         # For JAX compilation, we need to determine RTC path outside the compiled function
         use_rtc = rtc_is_enabled and prev_chunk_left_over is not None
 
+        logger.info(f"use_rtc: {use_rtc}")
+        logger.info(f"prev_chunk_left_over: {prev_chunk_left_over}")
+
         def original_step_scan(carry):
             x_t, time = carry
             suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
