@@ -288,6 +288,7 @@ class Pi0(_model.BaseModel):
 
         def original_step_scan(carry):
             x_t, time = carry
+            print(f"x_t shape: {time}, {time.shape}")
             suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
                 observation, x_t, time
             )
