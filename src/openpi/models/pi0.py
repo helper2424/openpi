@@ -319,10 +319,11 @@ class Pi0(_model.BaseModel):
             return self.action_out_proj(suffix_out[:, -self.action_horizon :])
 
         def step_scan(carry):
-            x_t, time, tracking_data= carry
+            x_t, time, tracking_data = carry
             if use_rtc:
                 logger.info("=== USING RTC PATH ===")
                 logger.info(f"rtc_processor: {self.rtc_processor}")
+                logger.info(f"tracking_data: {tracking_data}")
                 # @functools.partial(jax.vmap, in_axes=(0, 0, 0))  # over batch
                 def pinv_corrected_velocity(x_t, y, time):
                     def denoiser(x_t):
@@ -387,7 +388,7 @@ class Pi0(_model.BaseModel):
             x_t = x_t - dt * v_t
 
             tracking_data["x_t"] = tracking_data["x_t"].append(x_t)
-            
+
             # Return updated carry and scan output
             return x_t, time + dt, tracking_data
 
