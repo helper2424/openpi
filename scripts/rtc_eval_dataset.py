@@ -286,17 +286,10 @@ class RTCDatasetEvaluator:
         logging.info(f"Saved RTC comparison to {filename}")
         plt.close(fig)
 
-        # ========== Create detailed RTC tracking visualization ==========
-        if True:
-            logging.info("Creating detailed RTC tracking visualization...")
-            self.visualize_rtc_tracking(tracking_rtc, tracking_no_rtc, selected_indices)
-        else:
-            logging.info("No tracking data available for detailed visualization")
-
         # ========== Create denoising step visualizations ==========
         logging.info("Creating denoising step visualizations...")
-        self.visualize_denoising_steps(tracking_no_rtc, "no_rtc")
-        self.visualize_denoising_steps(tracking_rtc, "with_rtc")
+        self.visualize_denoising_steps(tracking_no_rtc, f"no_rtc_{selected_indices[0]}_{selected_indices[1]}")
+        self.visualize_denoising_steps(tracking_rtc, f"with_rtc_{selected_indices[0]}_{selected_indices[1]}")
 
         # ========== Combine denoising visualizations side-by-side ==========
         self.combine_denoising_visualizations()
