@@ -288,7 +288,6 @@ class Pi0(_model.BaseModel):
 
         def original_step_scan(carry):
             x_t, time = carry
-            print(f"x_t shape: {time}, {time.shape}")
             suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
                 observation, x_t, jnp.broadcast_to(time, batch_size)
             )
@@ -336,7 +335,7 @@ class Pi0(_model.BaseModel):
                         inference_delay, self.rtc_processor.rtc_config.execution_horizon, self.action_horizon, self.rtc_processor.rtc_config.prefix_attention_schedule
                     )
 
-                    error = (y - x_1) * weights[:, None]
+                    error = (y - x_1) * weights
                     pinv_correction = vjp_fun(error)[0]
                     # constants from paper
                     inv_r2 = (time**2 + (1 - time) ** 2) / ((1 - time) ** 2)
