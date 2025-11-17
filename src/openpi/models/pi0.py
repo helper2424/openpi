@@ -363,13 +363,13 @@ class Pi0(_model.BaseModel):
                 v_t, pinv_corrected_velocity_data = pinv_corrected_velocity(x_t, prev_chunk_left_over, time)
                 
                 logger.info(f"pinv_corrected_velocity_data: {pinv_corrected_velocity_data}")
-                tracking_data["x_1"] = tracking_data["x_1"].append(pinv_corrected_velocity_data["x_1"])
-                tracking_data["v_t"] = tracking_data["v_t"].append(pinv_corrected_velocity_data["v_t"])
-                tracking_data["error"] = tracking_data["error"].append(pinv_corrected_velocity_data["error"])
-                tracking_data["weights"] = tracking_data["weights"].append(pinv_corrected_velocity_data["weights"])
-                tracking_data["guidance_weight"] = tracking_data["guidance_weight"].append(pinv_corrected_velocity_data["guidance_weight"])
-                tracking_data["pinv_correction"] = tracking_data["pinv_correction"].append(pinv_corrected_velocity_data["pinv_correction"])
-                tracking_data["time"] = tracking_data["time"].append(time)
+                tracking_data["x_1"].append(pinv_corrected_velocity_data["x_1"])
+                tracking_data["v_t"].append(pinv_corrected_velocity_data["v_t"])
+                tracking_data["error"].append(pinv_corrected_velocity_data["error"])
+                tracking_data["weights"].append(pinv_corrected_velocity_data["weights"])
+                tracking_data["guidance_weight"].append(pinv_corrected_velocity_data["guidance_weight"])
+                tracking_data["pinv_correction"].append(pinv_corrected_velocity_data["pinv_correction"])
+                tracking_data["time"].append(time)
 
                 logger.info(f"tracking_data after pinv_corrected_velocity: {tracking_data}")
 
@@ -379,18 +379,18 @@ class Pi0(_model.BaseModel):
 
                 v_t = original_step_scan(carry)
 
-                tracking_data["x_t"] = tracking_data["x_t"].append(x_t)
-                tracking_data["v_t"] = tracking_data["v_t"].append(v_t)
-                tracking_data["time"] = tracking_data["time"].append(time)
-                tracking_data["x_1"] = tracking_data["x_1"].append(jnp.zeros_like(x_t))
-                tracking_data["error"] = tracking_data["error"].append(jnp.zeros_like(x_t))
-                tracking_data["weights"] = tracking_data["weights"].append(jnp.zeros(self.action_horizon))
-                tracking_data["guidance_weight"] = tracking_data["guidance_weight"].append(jnp.zeros(()))
-                tracking_data["pinv_correction"] = tracking_data["pinv_correction"].append(jnp.zeros_like(x_t))
+                tracking_data["x_t"].append(x_t)
+                tracking_data["v_t"].append(v_t)
+                tracking_data["time"].append(time)
+                tracking_data["x_1"].append(jnp.zeros_like(x_t))
+                tracking_data["error"].append(jnp.zeros_like(x_t))
+                tracking_data["weights"].append(jnp.zeros(self.action_horizon))
+                tracking_data["guidance_weight"].append(jnp.zeros(()))
+                tracking_data["pinv_correction"].append(jnp.zeros_like(x_t))
 
             x_t = x_t - dt * v_t
 
-            tracking_data["x_t"] = tracking_data["x_t"].append(x_t)
+            tracking_data["x_t"].append(x_t)
 
             # Return updated carry and scan output
             return x_t, time + dt, tracking_data
