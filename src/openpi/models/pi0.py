@@ -321,6 +321,8 @@ class Pi0(_model.BaseModel):
         def step_scan(carry):
             x_t, time= carry
             if use_rtc:
+                logger.info("=== USING RTC PATH ===")
+                logger.info(f"rtc_processor: {self.rtc_processor}")
                 # @functools.partial(jax.vmap, in_axes=(0, 0, 0))  # over batch
                 def pinv_corrected_velocity(x_t, y, time):
                     def denoiser(x_t):
@@ -391,18 +393,15 @@ class Pi0(_model.BaseModel):
                     "pinv_correction": jnp.zeros_like(x_t),
                 }
 
-            # Update x_t for next iteration
-            x_t_next = x_t + dt * v_t
-
             # Return updated carry and scan output
-            return x_t_next, time + dt
+            return x_t - dt * v_t, time + dt, scan_output
 
         def cond(carry):
             x_t, time = carry
             # robust to floating-point error
             return time >= -dt / 2
 
-        x_0, tracking_history = jax.lax.while_loop(cond, step_scan, (noise, 1.0))
+        x_0, tracking_history = jax.lax.while_loop(cond, step_scan, (noise, 1.0, {}))
 
         # Always return both to avoid JAX tracer issues
         # The caller can decide whether to use the tracking data
