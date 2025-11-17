@@ -327,7 +327,7 @@ class Pi0(_model.BaseModel):
                         v_t = original_step_scan((x_t, time))
 
                         # Remove batch dimension from outputs
-                        return (x_t - v_t * (1 - time))[0], v_t[0]
+                        return (x_t - v_t * (1 - time)), v_t
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
 
@@ -337,11 +337,8 @@ class Pi0(_model.BaseModel):
 
                     weights = einops.repeat(weights, "c -> b c a", b=batch_size, a=self.action_dim)
                     
-                    error = (y - x_1)
-                    print(f"error shape: {error.shape}")
-                    print(f"weights shape: {weights.shape}")
+                    error = (y - x_1) * weights
 
-                    error = error * weights
                     pinv_correction = vjp_fun(error)[0]
                     # constants from paper
                     inv_r2 = (time**2 + (1 - time) ** 2) / ((1 - time) ** 2)
