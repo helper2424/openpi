@@ -100,6 +100,8 @@ class Policy(BasePolicy):
             "actions": actions,
         }
 
+        print(f"outputs: {outputs}")
+
         if self._is_pytorch_model:
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
         else:
