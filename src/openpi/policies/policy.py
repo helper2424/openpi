@@ -95,6 +95,10 @@ class Policy(BasePolicy):
 
         model_time = time.monotonic() - start_time
 
+        # Handle case where actions is a tuple (e.g., from models that return auxiliary outputs)
+        if isinstance(actions, tuple):
+            actions = actions[0]
+
         outputs = {
             "state": inputs["state"],
             "actions": actions,
