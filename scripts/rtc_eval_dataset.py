@@ -95,6 +95,7 @@ class RTCDatasetEvaluator:
         # Initialize with disabled RTC
         disabled_rtc_config = replace(self.cfg.rtc_config, enabled=False)
         self.policy_without_rtc._model.init_rtc_processor(disabled_rtc_config)
+        self.policy_without_rtc._model.rtc_processor.rtc_config.enabled = False
         logging.info("Policy WITHOUT RTC loaded successfully")
 
     def _free_policy(self, which="both"):
@@ -445,15 +446,15 @@ class RTCDatasetEvaluator:
         logging.info(f"Saved RTC tracking details to {tracking_filename}")
         plt.close(fig)
 
-    def visualize_denoising_steps(self, tracking_data: dict, variant_name: str):
+    def visualize_denoising_steps(self, tracking_data: dict, filename: str):
         """Create denoising step visualizations from tracking data.
 
         Args:
             tracking_data: Dictionary with tracking history from RTCTracker
-            variant_name: Name variant (e.g., "no_rtc" or "with_rtc")
+            filename: Name of the file to save the visualizations
         """
         if tracking_data is None or "x_t" not in tracking_data:
-            logging.warning(f"No tracking data available for {variant_name} visualization")
+            logging.warning(f"No tracking data available for {filename} visualization")
             return
 
         # Extract data
@@ -470,7 +471,7 @@ class RTCDatasetEvaluator:
         if action_dim == 1:
             axes_xt = [axes_xt]
 
-        fig_xt.suptitle(f"X_t Denoising Trajectory ({variant_name})", fontsize=16)
+        fig_xt.suptitle(f"X_t Denoising Trajectory ({filename})", fontsize=16)
 
         for dim in range(action_dim):
             ax = axes_xt[dim]
@@ -492,7 +493,7 @@ class RTCDatasetEvaluator:
                 ax.set_xlabel("Action Horizon", fontsize=12)
 
         plt.tight_layout()
-        xt_filename = f"pi0_pytorch_x_t_{variant_name}_denoise_steps.png"
+        xt_filename = f"pi0_pytorch_x_t_{filename}_denoise_steps.png"
         plt.savefig(xt_filename, dpi=150)
         logging.info(f"Saved x_t denoising visualization to {xt_filename}")
         plt.close(fig_xt)
@@ -502,7 +503,7 @@ class RTCDatasetEvaluator:
         if action_dim == 1:
             axes_v = [axes_v]
 
-        fig_v.suptitle(f"V_t Velocity Trajectory ({variant_name})", fontsize=16)
+        fig_v.suptitle(f"V_t Velocity Trajectory ({filename})", fontsize=16)
 
         for dim in range(action_dim):
             ax = axes_v[dim]
@@ -524,7 +525,7 @@ class RTCDatasetEvaluator:
                 ax.set_xlabel("Action Horizon", fontsize=12)
 
         plt.tight_layout()
-        v_filename = f"pi0_pytorch_v_{variant_name}_denoise_steps.png"
+        v_filename = f"pi0_pytorch_v_{filename}_denoise_steps.png"
         plt.savefig(v_filename, dpi=150)
         logging.info(f"Saved v_t velocity visualization to {v_filename}")
         plt.close(fig_v)
