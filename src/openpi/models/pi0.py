@@ -322,15 +322,14 @@ class Pi0(_model.BaseModel):
         def step_scan(carry, _):
             x_t, time = carry
             if use_rtc:
-                logger.info("=== USING RTC PATH ===")
-                logger.info(f"rtc_processor: {self.rtc_processor}")
-                # @functools.partial(jax.vmap, in_axes=(0, 0, 0))  # over batch
+                # Use jax.debug.print for runtime logging (not just tracing)
+                jax.debug.print("=== USING RTC PATH === at time={}", time)
+
                 def pinv_corrected_velocity(x_t, y, time):
-                    logger.info(f"Call to pinv_corrected_velocity")
-                    logger.info(f"WTF!!!")
+                    jax.debug.print("  Step: time={}, x_t_norm={}", time, jnp.linalg.norm(x_t))
+
                     def denoiser(x_t):
                         v_t = original_step_scan((x_t, time))
-
                         # Remove batch dimension from outputs
                         return (x_t + v_t * (1 - time)), v_t
 
@@ -346,18 +345,17 @@ class Pi0(_model.BaseModel):
 
                     pinv_correction = vjp_fun(error)[0]
                     # constants from paper
+                    # Handle numerical stability: at time=1.0, we get (1-time)=0 which causes 0*inf=NaN
+                    # The correct limit as t→1 is guidance_weight→0, so we replace NaN with 0
                     inv_r2 = (time**2 + (1 - time) ** 2) / ((1 - time) ** 2)
                     c = jnp.nan_to_num((1 - time) / time, posinf=self.rtc_processor.rtc_config.max_guidance_weight)
                     guidance_weight = jnp.minimum(c * inv_r2, self.rtc_processor.rtc_config.max_guidance_weight)
+                    # Replace NaN with 0 (occurs at t=1 where guidance should be 0 anyway)
+                    guidance_weight = jnp.nan_to_num(guidance_weight, nan=0.0)
 
                     v_t_corrected = v_t + guidance_weight * pinv_correction
 
-                    logger.info(f"v_t_corrected: {v_t_corrected}")
-                    logger.info(f"x_1: {x_1}")
-                    logger.info(f"v_t: {v_t}")
-                    logger.info(f"error: {error}")
-                    logger.info(f"weights: {weights.shape}")
-                    logger.info(f"guidance_weight: {guidance_weight}")
+                    jax.debug.print("  Guidance: weight={}, error_norm={}", guidance_weight, jnp.linalg.norm(error))
 
                     # Return both velocity and tracking data
                     return v_t_corrected, {
@@ -371,11 +369,8 @@ class Pi0(_model.BaseModel):
 
                 v_t, step_tracking = pinv_corrected_velocity(x_t, prev_chunk_left_over, time)
 
-                logger.info(f"step_tracking: {step_tracking}")
-
             else:
-                logger.info("=== USING NON-RTC PATH ===")
-                logger.info(f"rtc_processor: {self.rtc_processor}")
+                jax.debug.print("=== USING NON-RTC PATH === at time={}", time)
 
                 v_t = original_step_scan((x_t, time))
 
