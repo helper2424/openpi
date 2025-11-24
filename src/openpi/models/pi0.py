@@ -331,7 +331,7 @@ class Pi0(_model.BaseModel):
                     def denoiser(x_t):
                         v_t = original_step_scan((x_t, time))
                         # Remove batch dimension from outputs
-                        return (x_t + v_t * (1 - time)), v_t
+                        return (x_t - v_t * (1 - time)), v_t
 
                     x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
 
