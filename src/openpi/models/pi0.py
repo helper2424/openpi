@@ -326,6 +326,8 @@ class Pi0(_model.BaseModel):
                 logger.info(f"rtc_processor: {self.rtc_processor}")
                 # @functools.partial(jax.vmap, in_axes=(0, 0, 0))  # over batch
                 def pinv_corrected_velocity(x_t, y, time):
+                    logger.info(f"Call to pinv_corrected_velocity")
+                    logger.info(f"WTF!!!")
                     def denoiser(x_t):
                         v_t = original_step_scan((x_t, time))
 
