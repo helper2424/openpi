@@ -319,14 +319,14 @@ class Pi0(_model.BaseModel):
             assert prefix_out is None
             return self.action_out_proj(suffix_out[:, -self.action_horizon :])
 
-        def step_scan(carry, _):
+        def step_scan(carry, step_idx):
             x_t, time = carry
             if use_rtc:
                 # Use jax.debug.print for runtime logging (not just tracing)
-                jax.debug.print("=== USING RTC PATH === at time={}", time)
+                jax.debug.print("=== Step {} - USING RTC PATH === at time={}", step_idx, time)
 
                 def pinv_corrected_velocity(x_t, y, time):
-                    jax.debug.print("  Step: time={}, x_t_norm={}", time, jnp.linalg.norm(x_t))
+                    jax.debug.print("  Step {}: time={}, x_t_norm={}", step_idx, time, jnp.linalg.norm(x_t))
 
                     def denoiser(x_t):
                         v_t = original_step_scan((x_t, time))
@@ -370,7 +370,7 @@ class Pi0(_model.BaseModel):
                 v_t, step_tracking = pinv_corrected_velocity(x_t, prev_chunk_left_over, time)
 
             else:
-                jax.debug.print("=== USING NON-RTC PATH === at time={}", time)
+                jax.debug.print("=== Step {} - USING NON-RTC PATH === at time={}", step_idx, time)
 
                 v_t = original_step_scan((x_t, time))
 
@@ -385,17 +385,33 @@ class Pi0(_model.BaseModel):
 
             x_t = x_t - dt * v_t
 
-            # Add x_t and time to tracking
+            # Add x_t, time, and step_idx to tracking
             step_tracking["x_t"] = x_t
             step_tracking["time"] = time
+            step_tracking["step_idx"] = step_idx
 
             # Return updated carry and scan output
             return (x_t, time + dt), step_tracking
 
-        final_carry, tracking_history = jax.lax.scan(step_scan, (noise, 1.0), None, length=num_steps)
+        # Create step indices array for scan
+        step_indices = jnp.arange(num_steps)
+        final_carry, tracking_history = jax.lax.scan(step_scan, (noise, 1.0), step_indices)
 
         # Extract final x_t from carry
         x_0 = final_carry[0]
+
+        # tracking_history now contains ALL steps (shape: (num_steps, ...))
+        # Each field in tracking_history dict has shape (num_steps, batch_size, ...)
+        logger.info(f"Collected tracking history for {num_steps} steps")
+        logger.info(f"tracking_history keys: {tracking_history.keys()}")
+        logger.info(f"Tracking history shapes:")
+        for key, value in tracking_history.items():
+            logger.info(f"  {key}: {value.shape}")
+
+        # Log summary of collected data
+        logger.info(f"Total denoise steps collected: {tracking_history['step_idx'].shape[0]}")
+        logger.info(f"Step indices range: {tracking_history['step_idx'][0]} to {tracking_history['step_idx'][-1]}")
+        logger.info(f"Time values: start={tracking_history['time'][0]:.4f}, end={tracking_history['time'][-1]:.4f}")
 
         # Store tracking history in the tracker if available
         if self.rtc_processor is not None and self.rtc_processor.tracker is not None:
@@ -403,4 +419,5 @@ class Pi0(_model.BaseModel):
 
         # Always return both to avoid JAX tracer issues
         # The caller can decide whether to use the tracking data
+        # tracking_history contains data from ALL denoising steps
         return x_0, tracking_history
