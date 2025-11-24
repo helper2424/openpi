@@ -91,20 +91,33 @@ class Policy(BasePolicy):
         start_time = time.monotonic()
 
         # Call sample_actions with additional kwargs
-        actions = self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs, **kwargs)
+        sample_result = self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs, **kwargs)
 
         model_time = time.monotonic() - start_time
 
-        # Handle case where actions is a tuple (e.g., from models that return auxiliary outputs)
-        if isinstance(actions, tuple):
-            actions = actions[0]
+        # Handle case where sample_result is a tuple (e.g., from models that return auxiliary outputs)
+        tracking_history = None
+        if isinstance(sample_result, tuple):
+            actions = sample_result[0]
+            # If there's a second element, it's the tracking_history
+            if len(sample_result) > 1:
+                tracking_history = sample_result[1]
+        else:
+            actions = sample_result
 
         outputs = {
             "state": inputs["state"],
             "actions": actions,
         }
 
-        print(f"outputs: {outputs}")
+        # Add tracking_history if available
+        if tracking_history is not None:
+            outputs["tracking_history"] = tracking_history
+
+        print(f"outputs keys: {list(outputs.keys())}")
+
+        # Extract tracking_history before batch dimension removal
+        tracking_history_out = outputs.pop("tracking_history", None)
 
         if self._is_pytorch_model:
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
@@ -112,6 +125,18 @@ class Policy(BasePolicy):
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
 
         outputs = self._output_transform(outputs)
+
+        # Add tracking_history back (it doesn't need batch dimension removal)
+        if tracking_history_out is not None:
+            # Convert tracking_history arrays to numpy
+            if self._is_pytorch_model:
+                tracking_history_out = jax.tree.map(
+                    lambda x: np.asarray(x.detach().cpu()) if hasattr(x, 'detach') else np.asarray(x),
+                    tracking_history_out
+                )
+            else:
+                tracking_history_out = jax.tree.map(lambda x: np.asarray(x), tracking_history_out)
+            outputs["tracking_history"] = tracking_history_out
 
         outputs["policy_timing"] = {
             "infer_ms": model_time * 1000,

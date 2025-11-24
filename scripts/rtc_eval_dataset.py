@@ -199,8 +199,13 @@ class RTCDatasetEvaluator:
             execution_horizon=self.cfg.execution_horizon
         )
         actions_no_rtc = result_no_rtc["actions"]
-        # Access tracking data directly from the tracker
-        tracking_no_rtc = self.policy_without_rtc._model.rtc_processor.tracker.get_tracking_history()
+        # Get tracking data from result dictionary
+        tracking_no_rtc = result_no_rtc.get("tracking_history", None)
+        logging.info(f"result_no_rtc keys: {list(result_no_rtc.keys())}")
+        if tracking_no_rtc is not None:
+            logging.info(f"tracking_no_rtc keys: {list(tracking_no_rtc.keys())}")
+        else:
+            logging.warning("tracking_no_rtc is None")
 
         # Free the non-RTC policy to save GPU memory
         self._free_policy(which="without_rtc")
@@ -236,11 +241,11 @@ class RTCDatasetEvaluator:
         logging.info(f"result_rtc['actions'] shape: {result_rtc['actions'].shape}")
 
         actions_rtc = result_rtc["actions"]
-        # Access tracking data directly from the tracker
-        tracking_rtc = self.policy_with_rtc._model.rtc_processor.tracker.get_tracking_history()
+        # Get tracking data from result dictionary
+        tracking_rtc = result_rtc.get("tracking_history", None)
 
         if tracking_rtc is not None:
-            logging.info(f"Tracking history keys: {list(tracking_rtc.keys())}")
+            logging.info(f"tracking_rtc keys: {list(tracking_rtc.keys())}")
             if 'weights' in tracking_rtc:
                 weights = np.array(tracking_rtc['weights'])
                 logging.info(f"Weights shape: {weights.shape}")
@@ -251,7 +256,7 @@ class RTCDatasetEvaluator:
                 gw = np.array(tracking_rtc['guidance_weight'])
                 logging.info(f"Guidance weights: min={np.min(gw)}, max={np.max(gw)}, mean={np.mean(gw)}")
         else:
-            logging.info("tracking_history is None")
+            logging.warning("tracking_rtc is None")
 
         # ========== Create side-by-side visualization ==========
         # Use min of 6 and model's action_dim for plots

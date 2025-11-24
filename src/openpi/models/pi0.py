@@ -353,7 +353,7 @@ class Pi0(_model.BaseModel):
                     # Replace NaN with 0 (occurs at t=1 where guidance should be 0 anyway)
                     guidance_weight = jnp.nan_to_num(guidance_weight, nan=0.0)
 
-                    v_t_corrected = v_t + guidance_weight * pinv_correction
+                    v_t_corrected = v_t - guidance_weight * pinv_correction
 
                     jax.debug.print("  Guidance: weight={}, error_norm={}", guidance_weight, jnp.linalg.norm(error))
 
