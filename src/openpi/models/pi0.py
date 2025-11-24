@@ -350,6 +350,13 @@ class Pi0(_model.BaseModel):
 
                     v_t_corrected = v_t + guidance_weight * pinv_correction
 
+                    print(f"v_t_corrected: {v_t_corrected}")
+                    print(f"x_1: {x_1}")
+                    print(f"v_t: {v_t}")
+                    print(f"error: {error}")
+                    print(f"weights: {weights.shape}")
+                    print(f"guidance_weight: {guidance_weight}")
+
                     # Return both velocity and tracking data
                     return v_t_corrected, {
                         "x_1": x_1,
