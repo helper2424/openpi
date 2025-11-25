@@ -1,4 +1,5 @@
 import logging
+from typing import Any
 
 import einops
 import flax.nnx as nnx
@@ -12,6 +13,8 @@ from openpi.models import pi0_config
 import openpi.models.gemma as _gemma
 import openpi.models.siglip as _siglip
 from openpi.shared import array_typing as at
+from openpi.policies import rtc_processor
+import functools
 
 logger = logging.getLogger("openpi")
 
@@ -64,7 +67,7 @@ def posemb_sincos(
 
 
 class Pi0(_model.BaseModel):
-    def __init__(self, config: pi0_config.Pi0Config, rngs: nnx.Rngs):
+    def __init__(self, config: pi0_config.Pi0Config, rngs: nnx.Rngs, rtc_config: rtc_processor.RTCConfig = None):
         super().__init__(config.action_dim, config.action_horizon, config.max_token_len)
         self.pi05 = config.pi05
         paligemma_config = _gemma.get_config(config.paligemma_variant)
@@ -102,6 +105,21 @@ class Pi0(_model.BaseModel):
         # This attribute gets automatically set by model.train() and model.eval().
         self.deterministic = True
 
+        self.init_rtc_processor(rtc_config)
+
+    def init_rtc_processor(self, rtc_config: rtc_processor.RTCConfig = None):
+        rtc_config = rtc_processor.RTCConfig(
+            enabled=True,
+            prefix_attention_schedule="EXP",
+            max_guidance_weight=5.0,
+            execution_horizon=10,
+        )
+
+        if rtc_config is None:
+            self.rtc_processor = None
+        else:
+            self.rtc_processor = rtc_processor.RTCProcessor(rtc_config)
+            
     @at.typecheck
     def embed_prefix(
         self, obs: _model.Observation
@@ -221,7 +239,9 @@ class Pi0(_model.BaseModel):
         *,
         num_steps: int | at.Int[at.Array, ""] = 10,
         noise: at.Float[at.Array, "b ah ad"] | None = None,
-    ) -> _model.Actions:
+        **kwargs: Any,
+    ) -> _model.Actions | tuple[_model.Actions, dict]:
+
         observation = _model.preprocess_observation(None, observation, train=False)
         # note that we use the convention more common in diffusion literature, where t=1 is noise and t=0 is the target
         # distribution. yes, this is the opposite of the pi0 paper, and I'm sorry.
@@ -236,7 +256,38 @@ class Pi0(_model.BaseModel):
         positions = jnp.cumsum(prefix_mask, axis=1) - 1
         _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
 
-        def step(carry):
+        inference_delay = kwargs.get("inference_delay")
+        prev_chunk_left_over = kwargs.get("prev_chunk_left_over")
+
+        rtc_is_enabled = self.rtc_processor is not None and self.rtc_processor.rtc_enabled()
+        logger.info(f"RTC check before scan: rtc_processor={self.rtc_processor is not None}, enabled={rtc_is_enabled}")
+
+        # For JAX compilation, we need to determine RTC path outside the compiled function
+        use_rtc = rtc_is_enabled and prev_chunk_left_over is not None
+
+        #  Make padding for prev_chunk_left_over to match the action_horizon and action_dim
+        # prev_chunk_left_over shape: (batch, time, action_dim)
+        # Pad the time dimension (axis 1) to match action_horizon
+        # Pad the action dimension (axis 2) to match self.action_dim
+        time_pad = self.action_horizon - prev_chunk_left_over.shape[1]
+        action_dim_pad = self.action_dim - prev_chunk_left_over.shape[2]
+        prev_chunk_left_over = jnp.pad(prev_chunk_left_over, ((0, 0), (0, time_pad), (0, action_dim_pad)))
+
+        # Debug prints before entering JAX-compiled loop
+        logger.info(f"RTC Config enabled: {self.rtc_processor is not None}")
+        if self.rtc_processor is not None:
+            logger.info(f"RTC processor details: enabled={self.rtc_processor.rtc_enabled()}, config={self.rtc_processor.rtc_config}")
+            logger.info(f"RTC execution_horizon from config: {self.rtc_processor.rtc_config.execution_horizon}")
+            logger.info(f"RTC prefix_attention_schedule: {self.rtc_processor.rtc_config.prefix_attention_schedule}")
+            logger.info(f"RTC max_guidance_weight: {self.rtc_processor.rtc_config.max_guidance_weight}")
+        logger.info(f"inference_delay: {inference_delay}")
+        logger.info(f"prev_chunk_left_over shape: {prev_chunk_left_over.shape if prev_chunk_left_over is not None else None}")
+        logger.info(f"action_horizon: {self.action_horizon}")
+        logger.info(f"action_dim: {self.action_dim}")
+
+        logger.info(f"use_rtc: {use_rtc}")  
+        logger.info(f"batch_size: {batch_size}")
+        def original_step_scan(carry):
             x_t, time = carry
             suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(
                 observation, x_t, jnp.broadcast_to(time, batch_size)
@@ -266,14 +317,108 @@ class Pi0(_model.BaseModel):
                 adarms_cond=[None, adarms_cond],
             )
             assert prefix_out is None
-            v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
+            return self.action_out_proj(suffix_out[:, -self.action_horizon :])
 
-            return x_t + dt * v_t, time + dt
-
-        def cond(carry):
+        def step_scan(carry, step_idx):
             x_t, time = carry
-            # robust to floating-point error
-            return time >= -dt / 2
+            if use_rtc:
+                # Use jax.debug.print for runtime logging (not just tracing)
+                jax.debug.print("=== Step {} - USING RTC PATH === at time={}", step_idx, time)
 
-        x_0, _ = jax.lax.while_loop(cond, step, (noise, 1.0))
-        return x_0
+                def pinv_corrected_velocity(x_t, y, time):
+                    jax.debug.print("  Step {}: time={}, x_t_norm={}", step_idx, time, jnp.linalg.norm(x_t))
+
+                    def denoiser(x_t):
+                        v_t = original_step_scan((x_t, time))
+                        # Remove batch dimension from outputs
+                        return (x_t - v_t * (1 - time)), v_t
+
+                    x_1, vjp_fun, v_t = jax.vjp(denoiser, x_t, has_aux=True)
+
+                    weights = self.rtc_processor.get_prefix_weights(
+                        inference_delay, self.rtc_processor.rtc_config.execution_horizon, self.action_horizon, self.rtc_processor.rtc_config.prefix_attention_schedule
+                    )
+
+                    weights = einops.repeat(weights, "c -> b c a", b=batch_size, a=self.action_dim)
+
+                    error = (y - x_1) * weights
+
+                    pinv_correction = vjp_fun(error)[0]
+                    # constants from paper
+                    # Handle numerical stability: at time=1.0, we get (1-time)=0 which causes 0*inf=NaN
+                    # The correct limit as t→1 is guidance_weight→0, so we replace NaN with 0
+                    inv_r2 = (time**2 + (1 - time) ** 2) / ((1 - time) ** 2)
+                    c = jnp.nan_to_num((1 - time) / time, posinf=self.rtc_processor.rtc_config.max_guidance_weight)
+                    guidance_weight = jnp.minimum(c * inv_r2, self.rtc_processor.rtc_config.max_guidance_weight)
+                    # Replace NaN with 0 (occurs at t=1 where guidance should be 0 anyway)
+                    guidance_weight = jnp.nan_to_num(guidance_weight, nan=0.0)
+
+                    jax.debug.print("Error {}: pinv_correction={}", error, pinv_correction)
+                    v_t_corrected = v_t - guidance_weight * pinv_correction
+
+                    jax.debug.print("  Guidance: weight={}, error_norm={}", guidance_weight, jnp.linalg.norm(error))
+
+                    # Return both velocity and tracking data
+                    return v_t_corrected, {
+                        "x_1": x_1,
+                        "v_t": v_t_corrected,
+                        "error": error,
+                        "weights": weights,
+                        "guidance_weight": guidance_weight,
+                        "pinv_correction": pinv_correction,
+                    }
+
+                v_t, step_tracking = pinv_corrected_velocity(x_t, prev_chunk_left_over, time)
+
+            else:
+                jax.debug.print("=== Step {} - USING NON-RTC PATH === at time={}", step_idx, time)
+
+                v_t = original_step_scan((x_t, time))
+
+                step_tracking = {
+                    "x_1": jnp.zeros_like(x_t),
+                    "v_t": v_t,
+                    "error": jnp.zeros_like(x_t),
+                    "weights": jnp.zeros((batch_size, self.action_horizon, self.action_dim)),
+                    "guidance_weight": jnp.zeros(()),
+                    "pinv_correction": jnp.zeros_like(x_t),
+                }
+
+            x_t = x_t - dt * v_t
+
+            # Add x_t, time, and step_idx to tracking
+            step_tracking["x_t"] = x_t
+            step_tracking["time"] = time
+            step_tracking["step_idx"] = step_idx
+
+            # Return updated carry and scan output
+            return (x_t, time + dt), step_tracking
+
+        # Create step indices array for scan
+        step_indices = jnp.arange(num_steps)
+        final_carry, tracking_history = jax.lax.scan(step_scan, (noise, 1.0), step_indices)
+
+        # Extract final x_t from carry
+        x_0 = final_carry[0]
+
+        # tracking_history now contains ALL steps (shape: (num_steps, ...))
+        # Each field in tracking_history dict has shape (num_steps, batch_size, ...)
+        logger.info(f"Collected tracking history for {num_steps} steps")
+        logger.info(f"tracking_history keys: {tracking_history.keys()}")
+        logger.info(f"Tracking history shapes:")
+        for key, value in tracking_history.items():
+            logger.info(f"  {key}: {value.shape}")
+
+        # Log summary of collected data
+        logger.info(f"Total denoise steps collected: {tracking_history['step_idx'].shape[0]}")
+        logger.info(f"Step indices range: {tracking_history['step_idx'][0]} to {tracking_history['step_idx'][-1]}")
+        logger.info(f"Time values: start={tracking_history['time'][0]:.4f}, end={tracking_history['time'][-1]:.4f}")
+
+        # Store tracking history in the tracker if available
+        if self.rtc_processor is not None and self.rtc_processor.tracker is not None:
+            self.rtc_processor.tracker.set_tracking_history(tracking_history)
+
+        # Always return both to avoid JAX tracer issues
+        # The caller can decide whether to use the tracking data
+        # tracking_history contains data from ALL denoising steps
+        return x_0, tracking_history

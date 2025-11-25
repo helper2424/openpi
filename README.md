@@ -321,3 +321,39 @@ We will collect common issues and their solutions here. If you encounter an issu
 | Import errors when running examples       | Make sure you've installed all dependencies with `uv sync`. Some examples may have additional requirements listed in their READMEs.                    |
 | Action dimensions mismatch                | Verify your data processing transforms match the expected input/output dimensions of your robot. Check the action space definitions in your policy classes.                                  |
 | Diverging training loss                            | Check the `q01`, `q99`, and `std` values in `norm_stats.json` for your dataset. Certain dimensions that are rarely used can end up with very small `q01`, `q99`, or `std` values, leading to huge states and actions after normalization. You can manually adjust the norm stats as a workaround. |
+
+
+### How to run
+
+```
+ git pull origin  ; uv run python scripts/rtc_eval_dataset.py \
+    --train-config-name cables10 \
+    --checkpoint-path /home/ubuntu/rtc-check/cables10/ \
+    --dataset-repo-id 1g0rrr/cables10 \
+     --rtc-config.enabled \
+    --rtc-config.prefix-attention-schedule EXP \
+    --rtc-config.max-guidance-weight 5.0 \
+    --rtc-config.execution-horizon 10 \
+    --seed 42     
+```
+
+# Run pytorhc model with RTC
+
+```
+ git pull origin  ; uv run python scripts/rtc_eval_dataset.py \
+    --train-config-name cables10 \
+    --checkpoint-path /home/ubuntu/rtc-check/cables10-pytorch/ \
+    --dataset-repo-id 1g0rrr/cables10 \
+     --rtc-config.enabled \
+    --rtc-config.prefix-attention-schedule EXP \
+    --rtc-config.max-guidance-weight 5.0 \
+    --rtc-config.execution-horizon 10 \
+    --seed 42 
+
+
+
+```
+uv run examples/convert_jax_model_to_pytorch.py \
+    --checkpoint_dir /home/ubuntu/rtc-check/cables10/ \
+    --config_name cables10 \
+    --output_path /home/ubuntu/rtc-check/cables10-pytorch/

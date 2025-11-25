@@ -546,12 +546,196 @@ class TrainConfig:
         if self.resume and self.overwrite:
             raise ValueError("Cannot resume and overwrite at the same time.")
 
+@dataclasses.dataclass(frozen=True)
+class LeRobotSAMDataConfig(DataConfigFactory):
+    @override
+    def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
+        # Import here to avoid circular imports.
+        from openpi.policies import sam_policy
+
+        # Repack transforms.
+        repack_transform = _transforms.Group(
+            inputs=[
+                _transforms.RepackTransform(
+                    {
+                        "laptop": "observation.images.laptop",
+                        "phone": "observation.images.phone",
+                        "side": "observation.images.side",
+                        "state": "observation.state",
+                        "actions": "action",
+                    }
+                )
+            ]
+        )
+
+        data_transforms = _transforms.Group(
+            inputs=[sam_policy.SAMInputs(action_dim=model_config.action_dim)],
+            outputs=[sam_policy.SAMOutputs()],
+        )
+
+        delta_action_mask = _transforms.make_bool_mask(6, -1)
+        data_transforms = data_transforms.push(
+            inputs=[_transforms.DeltaActions(delta_action_mask)],
+            outputs=[_transforms.AbsoluteActions(delta_action_mask)],
+        )
+
+        model_transforms = ModelTransformFactory(default_prompt="Insert cable into the connector.")(model_config)
+
+        return dataclasses.replace(
+            self.create_base_config(assets_dirs, model_config),
+            repack_transforms=repack_transform,
+            data_transforms=data_transforms,
+            model_transforms=model_transforms,
+            action_sequence_keys=("action",)
+        )
 
 # Use `get_config` if you need to get a config by name in your code.
 _CONFIGS = [
-    #
-    # Inference Aloha configs.
-    #
+    TrainConfig(
+        name="cables10c2",
+        model=pi0_config.Pi0Config(action_horizon=16),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/cables10_cleaned2",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000, 
+    ),      
+    TrainConfig(
+        name="cables10c",
+        model=pi0_config.Pi0Config(action_horizon=16),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/cables10_cleaned",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000, 
+    ),  
+    TrainConfig(
+        name="cables10",
+        model=pi0_config.Pi0Config(action_horizon=16),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/cables10",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000, 
+    ),      
+    TrainConfig(
+        name="cables8",
+        model=pi0_config.Pi0Config(action_horizon=16),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/cables_v8",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000, 
+    ),        
+    TrainConfig(
+        name="cables6",
+        model=pi0_config.Pi0Config(action_horizon=16),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/cables_v6",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000, 
+    ),    
+    TrainConfig(
+        name="cables2",
+        model=pi0_config.Pi0Config(action_horizon=16),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/cables_v2",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000, 
+    ),    
+    TrainConfig(
+        name="cables23",
+        model=pi0_config.Pi0Config(action_horizon=16),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/amd-test53",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000, 
+    ),
+    TrainConfig(
+        name="igorcables",
+        model=pi0_config.Pi0Config(action_horizon=16),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/sa-evt2-01-cable11",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000, 
+    ),
+    TrainConfig(
+        name="peel2pi0",
+        model=pi0_config.Pi0Config(action_horizon=16),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/peeloff3",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,        
+    ),
+    TrainConfig(
+        name="peel2pi05",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=16),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/peeloff3",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi0_peel",
+        model=pi0_config.Pi0Config(),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/sam4_peel_off_v1",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi0_base/params"),
+        num_train_steps=30_000,        
+    ),
+    TrainConfig(
+        name="pi05_peel",
+        model=pi0_config.Pi0Config(pi05=True),
+        data=LeRobotSAMDataConfig(
+            repo_id="1g0rrr/sam4_peel_off_v1",
+            base_config=DataConfig(
+                prompt_from_task=True,
+            ),
+        ),
+        weight_loader=weight_loaders.CheckpointWeightLoader("gs://openpi-assets/checkpoints/pi05_base/params"),
+        num_train_steps=30_000,
+    ),
+
     TrainConfig(
         name="pi0_aloha",
         model=pi0_config.Pi0Config(),

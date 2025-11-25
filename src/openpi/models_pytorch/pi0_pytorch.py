@@ -1,6 +1,7 @@
 import logging
 import math
 
+import numpy as np
 import torch
 from torch import Tensor
 from torch import nn
@@ -9,6 +10,8 @@ import torch.nn.functional as F  # noqa: N812
 import openpi.models.gemma as _gemma
 from openpi.models_pytorch.gemma_pytorch import PaliGemmaWithExpertModel
 import openpi.models_pytorch.preprocessing_pytorch as _preprocessing
+from openpi.models_pytorch.rtc import RTCProcessor, RTCTracker
+from openpi.policies.rtc_processor import RTCConfig
 
 
 def get_safe_dtype(target_dtype, device_type):
@@ -109,10 +112,14 @@ class PI0Pytorch(nn.Module):
             self.action_time_mlp_out = nn.Linear(action_expert_config.width, action_expert_config.width)
 
         torch.set_float32_matmul_precision("high")
-        self.sample_actions = torch.compile(self.sample_actions, mode="max-autotune")
+        # self.sample_actions = torch.compile(self.sample_actions, mode="max-autotune")
 
         # Initialize gradient checkpointing flag
         self.gradient_checkpointing_enabled = False
+
+        # Initialize RTC processor
+        rtc_config = getattr(config, 'rtc_config', None)
+        self.init_rtc_processor(rtc_config)
 
         msg = "transformers_replace is not installed correctly. Please install it with `uv pip install transformers==4.53.2` and `cp -r ./src/openpi/models_pytorch/transformers_replace/* .venv/lib/python3.11/site-packages/transformers/`."
         try:
@@ -122,6 +129,22 @@ class PI0Pytorch(nn.Module):
                 raise ValueError(msg)
         except ImportError:
             raise ValueError(msg) from None
+
+    def init_rtc_processor(self, rtc_config: RTCConfig = None):
+        """Initialize the RTC processor with the given configuration.
+
+        Args:
+            rtc_config: RTCConfig instance or None. If None, creates a default config with enabled=True.
+        """
+        if rtc_config is None:
+            # Create default RTC config similar to JAX version
+            rtc_config = RTCConfig()
+
+        self.rtc_processor = RTCProcessor(rtc_config=rtc_config)
+        logging.info(f"Initialized RTC processor: enabled={rtc_config.enabled}, "
+                    f"execution_horizon={rtc_config.execution_horizon}, "
+                    f"max_guidance_weight={rtc_config.max_guidance_weight}, "
+                    f"prefix_attention_schedule={rtc_config.prefix_attention_schedule}")
 
     def gradient_checkpointing_enable(self):
         """Enable gradient checkpointing for memory optimization."""
@@ -373,9 +396,9 @@ class PI0Pytorch(nn.Module):
         return F.mse_loss(u_t, v_t, reduction="none")
 
     @torch.no_grad()
-    def sample_actions(self, device, observation, noise=None, num_steps=10) -> Tensor:
-        """Do a full inference forward and compute the action (batch_size x num_steps x num_motors)"""
+    def sample_actions(self, device, observation, noise=None, num_steps=10, **kwargs) -> Tensor:
         bsize = observation.state.shape[0]
+
         if noise is None:
             actions_shape = (bsize, self.config.action_horizon, self.config.action_dim)
             noise = self.sample_noise(actions_shape, device)
@@ -398,20 +421,60 @@ class PI0Pytorch(nn.Module):
             use_cache=True,
         )
 
+        # Extract RTC parameters from kwargs
+        prev_chunk_left_over = kwargs.pop("prev_chunk_left_over", None)
+        inference_delay = kwargs.pop("inference_delay", 0)
+
+        # Pad prev_chunk_left_over to match action_horizon and action_dim if provided
+        if prev_chunk_left_over is not None:
+            # Convert to tensor if it's a numpy array
+            if isinstance(prev_chunk_left_over, np.ndarray):
+                prev_chunk_left_over = torch.from_numpy(prev_chunk_left_over).to(device)
+
+            # prev_chunk_left_over shape: (batch, time, action_dim)
+            time_pad = self.config.action_horizon - prev_chunk_left_over.shape[1]
+            action_dim_pad = self.config.action_dim - prev_chunk_left_over.shape[2]
+            if time_pad > 0 or action_dim_pad > 0:
+                prev_chunk_left_over = torch.nn.functional.pad(
+                    prev_chunk_left_over,
+                    (0, action_dim_pad, 0, time_pad, 0, 0),  # (left, right) for each dim from right to left
+                )
+                logging.info(f"Padded prev_chunk_left_over to shape: {prev_chunk_left_over.shape}")
+
         dt = -1.0 / num_steps
         dt = torch.tensor(dt, dtype=torch.float32, device=device)
+
+        # Reset tracker for new inference run
+        self.rtc_processor.tracker.reset()
 
         x_t = noise
         time = torch.tensor(1.0, dtype=torch.float32, device=device)
         while time >= -dt / 2:
             expanded_time = time.expand(bsize)
-            v_t = self.denoise_step(
-                state,
-                prefix_pad_masks,
-                past_key_values,
-                x_t,
-                expanded_time,
+
+            # Partial call of the function, using lambda to wrap denoise_step
+            # Pass x_t as positional argument since it could have different naming in different models
+            denoise_step_partial_call = lambda input_x_t: self.denoise_step(
+                state=state,
+                prefix_pad_masks=prefix_pad_masks,
+                past_key_values=past_key_values,
+                x_t=input_x_t,
+                timestep=expanded_time,
             )
+
+            if self.rtc_processor.rtc_config.enabled and prev_chunk_left_over is not None:
+                execution_horizon = kwargs.get("execution_horizon", self.rtc_processor.rtc_config.execution_horizon)
+
+                v_t = self.rtc_processor.denoise_step(
+                    x_t=x_t,
+                    prev_chunk_left_over=prev_chunk_left_over,
+                    inference_delay=inference_delay,
+                    time=time,
+                    original_denoise_step_partial=denoise_step_partial_call,
+                    execution_horizon=execution_horizon,
+                )
+            else:
+                v_t = denoise_step_partial_call(x_t)
 
             # Euler step - use new tensor assignment instead of in-place operation
             x_t = x_t + dt * v_t

@@ -280,7 +280,9 @@ class BaseModel(nnx.Module, abc.ABC):
     ) -> at.Float[at.Array, "*b ah"]: ...
 
     @abc.abstractmethod
-    def sample_actions(self, rng: at.KeyArrayLike, observation: Observation, **kwargs) -> Actions: ...
+    def sample_actions(
+        self, rng: at.KeyArrayLike, observation: Observation, **kwargs
+    ) -> Actions | tuple[Actions, dict]: ...
 
 
 def restore_params(

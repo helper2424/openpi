@@ -61,11 +61,11 @@ class Policy(BasePolicy):
             self._sample_actions = model.sample_actions
         else:
             # JAX model setup
-            self._sample_actions = nnx_utils.module_jit(model.sample_actions)
+            self._sample_actions = model.sample_actions
             self._rng = rng or jax.random.key(0)
-
+            
     @override
-    def infer(self, obs: dict, *, noise: np.ndarray | None = None) -> dict:  # type: ignore[misc]
+    def infer(self, obs: dict, *, noise: np.ndarray | None = None, **kwargs) -> dict:  # type: ignore[misc]
         # Make a copy since transformations may modify the inputs in place.
         inputs = jax.tree.map(lambda x: x, obs)
         inputs = self._input_transform(inputs)
@@ -89,17 +89,55 @@ class Policy(BasePolicy):
 
         observation = _model.Observation.from_dict(inputs)
         start_time = time.monotonic()
+
+        # Call sample_actions with additional kwargs
+        sample_result = self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs, **kwargs)
+
+        model_time = time.monotonic() - start_time
+
+        # Handle case where sample_result is a tuple (e.g., from models that return auxiliary outputs)
+        tracking_history = None
+        if isinstance(sample_result, tuple):
+            actions = sample_result[0]
+            # If there's a second element, it's the tracking_history
+            if len(sample_result) > 1:
+                tracking_history = sample_result[1]
+        else:
+            actions = sample_result
+
         outputs = {
             "state": inputs["state"],
-            "actions": self._sample_actions(sample_rng_or_pytorch_device, observation, **sample_kwargs),
+            "actions": actions,
         }
-        model_time = time.monotonic() - start_time
+
+        # Add tracking_history if available
+        if tracking_history is not None:
+            outputs["tracking_history"] = tracking_history
+
+        print(f"outputs keys: {list(outputs.keys())}")
+
+        # Extract tracking_history before batch dimension removal
+        tracking_history_out = outputs.pop("tracking_history", None)
+
         if self._is_pytorch_model:
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...].detach().cpu()), outputs)
         else:
             outputs = jax.tree.map(lambda x: np.asarray(x[0, ...]), outputs)
 
         outputs = self._output_transform(outputs)
+
+        # Add tracking_history back (it doesn't need batch dimension removal)
+        if tracking_history_out is not None:
+            # Convert tracking_history arrays to numpy
+            if self._is_pytorch_model:
+                tracking_history_out = jax.tree.map(
+                    lambda x: np.asarray(x.detach().cpu()) if hasattr(x, 'detach') else np.asarray(x),
+                    tracking_history_out
+                )
+            else:
+                tracking_history_out = jax.tree.map(lambda x: np.asarray(x), tracking_history_out)
+            outputs["tracking_history"] = tracking_history_out
+
         outputs["policy_timing"] = {
             "infer_ms": model_time * 1000,
         }
